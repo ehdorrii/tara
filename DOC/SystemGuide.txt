@@ -1,0 +1,3514 @@
+                             Time-sharing
+                             Applications
+                             Remote
+                             Access
+							 
+                             System Guide
+
+
+                             3 February 1986
+
+
+     PLEASE NOTE COMMENTS FLAGGED BY '***'.  IMPORTANT CAUTIONS AND
+     CHANGES ARE CITED THEREIN.
+
+     *** Note that not all sections listed below may actually be
+     *** present, or in the indicated order.  This list is simply
+     *** an outline for my own use in developing this document.
+	 
+	 
+          PART 1 - Operation and Use
+            Installation
+              NPSI Definitions
+              NCP Definitions
+              VTAM Definitions
+              HAL/ADT
+              Installation Options
+              Assemble and Linkedit
+              Proc
+            Operation
+              Activate MCH and PU
+              Activate SVC Links
+              Activate Switched Major Node
+              Starting TARA
+              Stopping TARA
+              Operator Commands
+            Terminal Use
+              Logging On
+                Terminal Types and Screen Sizes Supported
+              Connecting to a Remote Host
+              Controlling Screen Appearance
+              Detaching from a Remote Host
+              Logging Off
+			  
+          PART 2 - Internals
+            Register Usage
+            Macro Descriptions
+            RPL Usage
+            Data Structures
+              Queues
+              Command Descriptor Block
+              Common Storage
+              Session Storage
+            Logic FLow
+			
+          PART 3 - Reference Information
+            Messages
+              Operator Messages
+              Terminal Messages
+            Abends
+			VTAM Exits
+            3270 Reference Information
+              3274 Session Processing States
+              SNA Sense Codes Returned by 3274
+              3270 Bind Parameter Checking
+            NPSI Reference Information
+              LU Simulator Actions for Session Control RUs
+              NPSI Bind Parameter Checking
+              NPSI Process Sequences
+            X.25 Reference Information
+            X.29 Reference Information
+            X.121 Reference Information
+			
+          Bibliography
+		  Glossary
+
+
+
+===============================================================================
+                          PART 1 - Operation and Use
+===============================================================================
+
+
+1.1 - TARA Installation
+---   ----- ------------
+
+
+Connection to an X.25 PSDN
+---------- -- -- ---- ----
+
+
+The host system on which TARA executes must have a link to an X.25 
+Packet-switched Data Network.  This access is provided through an IBM 37X5 
+communications controller executing an NCP which has been generated to include 
+the X.25 NCP Packet Switching Interface (NPSI). A physical link must also exist 
+to an X.25 network such as Telenet or Tymenet.  It is important to remember 
+that this makes your 37X5 and host computer a 'native X.25' host.
+
+
+NPSI Definitions
+---- -----------
+
+
+Sample X.25 NPSI stage 1 generation statements used at to define a link to 
+Telenet are shown here:
+
+
+NP5A1283 TITLE 'SECOND PRODUCTION VERSION OF X.25 NPSI'
+**********************************************************************
+*                                                                    *
+*  REF  CCSOFT.STAGE1(X25A1283)                                      *
+* COMP  X.25 NPSI RELEASE 2                                          *
+*  DOC  THIS IS THE STAGE 1 SOURCE FOR AN X.25 NPSI GENERATION. THE  *
+*       DEFINITIONS INCLUDED CONSIST OF ONE MCH TO TELENET. THERE    *
+*       ARE SIXTEEN SVC'S ON THIS MCH. THE SVCS ARE ALL DIAL-OUT,    *
+*       AND ARE USED BY TARA.                                        *
+*                                                                    *
+**********************************************************************
+*                                                                    *
+*  !!! N.B. !!!  IF THE PARAMETERS OF THE NCP GENEND MACRO ARE TO BE *
+*  CHANGED, THEY MUST BE CHANGED ON THE X25END MACRO HERE, INSTEAD   *
+*  (OR ALSO).                                                        *
+*                                                                    *
+**********************************************************************
+         PRINT NOGEN
+BUILDNET X25BUILD IDNUMH=01,                                          -
+               JOBCARD=YES,        PRODUCE A SINGLE STAGE 2 JOBSTREAM -
+               MACLIB=LNKNPSIA,    SECOND-LEVEL QUAL FOR OUTPUT       -
+               MCHCNT=1,           1 REAL LINK IS BEING GENERATED     -
+               QUALIFY=CCSOFT,     FIRST-LEVEL QUALIFIER FOR DS'S     -
+               SNAP=NO,            DON'T INCLUDE SNAP FACILITY        -
+               TYPSYS=OS           PRODUCE OS JCL
+NETWORK1 X25NET CPHINDX=1,         HIGHEST INDEX ON X25VCCPT MACRO    -
+               DM=YES,             DISCONNECT MODE RESP IS SUPPORTED  -
+               NETTYPE=1,          TELENET IS TYPE 1 NETWORK          -
+               OUHINDX=1           HIGHEST INDEX ON X25OUFT MACRO
+CONPARM1 X25VCCPT INDEX=1,         FIRST ENTRY IN VCCPT - A TELENET VC-
+               INSLOW=(25,12),     PERCENTAGE OF NCP'S SLOWDOWN PARM  -
+               MAXPKTL=128,        CANNOT EXCEED MAXBFRU X UNITSZ     -
+               VWINDOW=2           DEFAULT PKT WINDOW SIZE FOR TELENET
+USERFAC1 X25OUFT INDEX=1           USER FACILITY FIELD ON CALL REQ PKT
+LAH0B6   X25MCH ADDRESS=(0B6,0B7), XMIT & RCV LINE SETS               -
+               ANS=STOP,           STOP OPERATION ON ANS CONDITION    -
+               CSBTYPE=3,          LINE SET LIVES IN SECOND FRAME     -
+               DBIT=YES,           TELENET REQUIRES D-BIT ON          -
+               FRMLGTH=131,        MAXIMUM LENGTH OF AN I-FRAME       -
+               GATE=NO,            NO GATE OR DATE ON THIS LINK       -
+               LCGDEF=0(32),       HIGH-LCG(HIGH-LCN)                 -
+               LCN0=NOTUSED,       LCN 0 CAN BE USED                  -
+               LLCLIST=(LLC5),     NON-SNA DTE W/O PAD/GATE SUPPORT   -
+               LUNAME=LAH0B6,      LU NAME FOR THIS PHYSICAL CIRCUIT  -
+               MWINDOW=4,          LINK-LEVEL WINDOW SIZE             -
+               NCPGRP=GA025,       NCP GROUP NAME                     -
+               NDRETRY=3,                                             -
+               NPRETRY=5,                                             -
+               PAD=TRANSP,         TARA SEES PAD MESSAGES             -
+               PKTMODL=8,          PACKET MODULO OF 8 FOR TELENET     -
+               PROTCOL=LAPB,       LINK ACCESS PROCEDURE - BALANCED   -
+               PUNAME=CA099TEL,    NAME OF GENERATED PU MACRO         -
+               SPEED=9600,         LINK TO TELENET                    -
+               STATION=DTE,        WE ARE A HOST, NOT A NODE          -
+               TDTIMER=3,                                             -
+               TPTIMER=1.2,                                           -
+               TRAN=EVEN
+CHANGRP0 X25LCG LCGN=0             LOGICAL CHANNEL GROUP NUMBER
+TELENET  X25VC CALL=OUT,           TARA ONLY MAKES OUTGOING CALLS     -
+               LCN=(1,16),         LOGICAL CHANNEL NUMBERS FOR 16 VC'S-
+               MAXLU=1,            1 LU PER SVC                       -
+               OUFINDX=1,          USE USER X25OUFT WITH INDEX=1      -
+               TYPE=SWITCHED,      NO PVC'S                           -
+               VCCINDX=1           USE X25VCCPT WITH INDEX=1
+         X25END HSPDSEL=(,00000111),                                  -
+               SCANCTL=(2,2),                                         -
+               X25VTAM=NO
+         END
+
+
+NCP Definitions
+--- -----------
+
+
+After the NPSI gen is complete, an NCP must be generated.  Sample
+definition statements for an NCP stage 1 are shown below:
+
+
+NCPPCCU1 PCCU  CUADDR=0F0,                                            -
+               AUTODMP=NO,                                            -
+               AUTOIPL=NO,                                            -
+               AUTOSYN=YES,                                           -
+               DUMPDS=NCPDUMPA,                                       -
+               INITEST=NO,                                            -
+               MAXDATA=4000,                                          -
+               SUBAREA=1,                                             -
+               VFYLM=YES
+NAL46    BUILD ABEND=YES,                                             -
+               ANS=YES,                                               -
+               ASMXREF=SHORT,                                         -
+               BFRS=64,                                               -
+               NCPCA=(ACTIVE,ACTIVE),                                 -
+               CA=(TYPE4,TYPE4-1),                                    -
+               DR3270=YES,                                            -
+               ERASE=NO,                                              -
+               ENABLTO=30,                                            -
+               JOBCARD=YES,                                           -
+               LESIZE=1024,                                           -
+               LOADLIB=NCPLOAD,                                       -
+               MACLIB=(LNKNPSIA,MACNPSI),   --> FOR NPSI <--          -
+               MAXSSCP=4,                                             -
+               MAXSUBA=15,                                            -
+               MEMSIZE=512,                                           -
+               MODEL=3705-2,                                          -
+               NEWNAME=NAL46,                                         -
+               OBJLIB=ONAL46,                                         -
+               OLT=YES,                                               -
+               QUALIFY=CCSOFT,                                        -
+               RESOEXT=24,                                            -
+               SLODOWN=12,                                            -
+               SUBAREA=10,                                            -
+               TRACE=(YES,64),                                        -
+               TYPGEN=NCP,                                            -
+               TYPSYS=OS,                                             -
+               UNIT=SYSDA,                                            -
+               USERLIB=OBJNPSI              --> FOR NPSI <--
+NCPSYSC  SYSCNTRL OPTIONS=(MODE,                                      -
+               RCNTRL,RCOND,RECMD,                                    -
+               RIMM,ENDCALL,                                          -
+               BHSASSC,NAKLIM,                                        -
+               SESSION,SSPAUSE,                                       -
+               XMTLMT,STORDSP)
+HOST1    HOST  BFRPAD=0,                                              -
+               DELAY=.2,                                              -
+               INBFRS=33,                                             -
+               MAXBFRU=26,                                            -
+               STATMOD=YES,                                           -
+               SUBAREA=1,                                             -
+               TIMEOUT=420,                                           -
+               UNITSZ=156
+CSB1     CSB   MOD=0,                                                 -
+               SPEED=(600,1200),                                      -
+               TYPE=TYPE2
+CSB2     CSB   MOD=1,                                                 -
+               SPEED=(150,600,1200),                                  -
+               TYPE=TYPE3
+          .
+          .
+          .
+
+VTAM Definitions
+---- -----------
+
+
+VTAM Switched Major Node
+---- -------- ----- ----
+
+
+Finally, after the NCP is generated with X.25 NPSI and loaded into the
+37X5 communications controller, there remains one final definition to
+complete the link between TARA and the X.25 network: that is the VTAM
+switched major node definition.
+
+**********************************************************************
+*                                                                    *
+*/* REF  SYS1.VTAMLST(SWTARA)                                      */*
+*/* COMP ACF/VTAM V2R1                                             */*
+*/* DOC  THIS IS A 'SWITCHED MAJOR NODE' DEFINITION FOR THE LU'S   */*
+*/*      ASSOCIATED WITH NPSI/TELENET.                             */*
+*                                                                    *
+**********************************************************************
+SWTARA   VBUILD TYPE=SWNET,MAXGRP=8,MAXNO=12
+*
+**********************************************************************
+*                         COMPUSERVE GROUP                           *
+**********************************************************************
+*
+CSCPS000 PU    ADDR=01,IDBLK=003,IDNUM=01020,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110202002020050000*01020),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSCPS000 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+**********************************************************************
+CSCPS001 PU    ADDR=01,IDBLK=003,IDNUM=01022,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110202002020050000*01022),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSCPS001 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+*
+**********************************************************************
+*                         TELEMAIL GROUP                             *
+**********************************************************************
+*
+CSTLM000 PU    ADDR=01,IDBLK=003,IDNUM=01032,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110909001590050000*01032),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSTLM000 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+**********************************************************************
+CSTLM001 PU    ADDR=01,IDBLK=003,IDNUM=01034,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110909001590050000*01034),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSTLM001 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+*
+**********************************************************************
+*                           SOURCE GROUP                             *
+**********************************************************************
+*
+CSSRC000 PU    ADDR=01,IDBLK=003,IDNUM=01036,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110301000280050000*01036),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSSRC000 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+**********************************************************************
+CSSRC001 PU    ADDR=01,IDBLK=003,IDNUM=01038,                         -
+               IRETRY=YES,ISTATUS=ACTIVE,                             -
+               MAXDATA=261,MAXOUT=1,MAXPATH=1,PACING=(1,1),PASSLIM=1, -
+               PUTYPE=1,SSCPFM=USSSCS,VPACING=(2,1),DISCNT=YES
+PATH     PATH  DIALNO=(3110301000280050000*01038),                    -
+               GID=1,GRPNM=GA026,PID=1,USE=YES
+TSSRC001 LU    ISTATUS=ACTIVE,LOCADDR=0,SSCPFM=USSSCS,USSTAB=USSNOMSG
+
+
+VTAM USS Table
+---- --- -----
+
+
+You should also create a USS table in which all the USS messages are
+null.  In some cases, when a connection is initially made USS may
+inadvertantly receive data from the remote host, and it then sends
+an error message to the host.  I don't know why this happens, but it
+generally doesn't cause any more harm than cluttering up the users
+screen.  This can be avoided however by nullifying the effect of USS.
+A sample USS table is shown here:
+
+NOMSG    USSTAB
+         USSMSG MSG=00,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=01,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=02,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=03,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=04,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=05,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=06,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=07,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=08,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=09,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=10,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=11,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=12,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=13,TEXT=' ',SUPP=ALWAYS
+         USSMSG MSG=14,TEXT=' ',SUPP=ALWAYS
+         USSEND
+         END
+
+
+
+Defining Hosts to TARA
+-------- ----- -- ----
+
+Hosts are defined to TARA by assembling and linking a 'Host Alias/
+Host Address table'. This table is created using three macros: HOSTTAB,
+HOST, and HOSTEND.
+
+
+HOSTTAB
+
+This must be the first statement in the table source. The name field
+specifies the name of the table (XTAHALT). There is one operand on this
+statement: NUMSVC. This specifies the total number of switched virtual
+circuits you have generated in your NCP/NPSI gen (specified by the
+LCN parameter of the X25VC macro of the stage 1 NPSI).  In the sample
+NPSI gen shown above 16 virtual circuits were specified, so you would
+code:
+
+         XTAHALT  HOSTAB  NUMSVC=16
+	  
+	  
+HOST
+
+A HOST macro must be coded for each distinct host you will be
+establishing sessions with. There are three operands: LUPREFIX is used
+to specify the first five characters of the LU names which are
+associated with the host you are defining in your VTAM switched
+definition; ALIAS is used to specify the names by which this host can
+be referred to in the CALL command.  Multiple names are allowed. Each
+of the names can be a maximum of 12 characters in length.  NUMCALLS
+specifies the number of concurrent sessions allowed to this host. This
+number should correspond to the number of definitions you have coded in
+your VTAM switched definition for this host. Example:
+
+         HOST  LUPREFIX=TSCPS,ALIAS=(CPS,COMPUSERVE),NUMCALLS=4
+	  
+	  
+HOSTEND
+
+The last HOST macro must be followed by a HOSTEND macro. This macro
+should be followed by an assembler END statement.
+
+A sample of a complete Host Alias/Address Table for the configuration
+shown in the above samples would look like this:
+
+XTAHALT  HOSTTAB NUMSVC=16
+*
+         HOST    LUPREFIX=TSCPS,ALIAS=(COMPUSERVE,CPS),NUMCALLS=2
+         HOST    LUPREFIX=TSTLM,ALIAS=(TELEMAIL),NUMCALLS=2
+         HOST    LUPREFIX=TSSRC,ALIAS=(SOURCE),NUMCALLS=2
+*
+         HOSTEND
+         END
+	   
+
+
+JCL for Job or STC Execution of TARA
+--- --- --- -- --- --------- -- ----
+
+TARA requires 2 datasets during execution. The first is the log dataset. The
+DDNAME is XTALOGDS.  This is a sequential dataset (DCB=(RECFM=VB,LRECL=512))
+which will receive messages of a statistical nature, like when sessions begin,
+to what LUs, when sessions end, number of messages sent/received, and error
+information.  The second dataset is a dump dataset with a DDNAME of XTASNAP
+(DCB=(RECFM=VBA,LRECL=125,BLKSIZE=1632)).  Additional DD statements may also
+be required depending on the execution environment (e.g. STEPLIB, SYSABEND). 
+The name of the program on the EXEC card should be XTARA.
+
+Sample JCL for executing TARA as a started task is shown:
+
+    //XTARA   PROC
+    //TARA    EXEC  PGM=XTARA,TIME=1440
+    //STEPLIB  DD   DSN=SYSPROG.LOADLIB,DISP=SHR
+    //XTALOGDS DD   DSN=SYSPROG.TARA.LOG,DISP=SHR
+    //XTASNAP  DD   SYSOUT=(A,,M123)
+    //SYSABEND DD   SYSOUT=(A,,M123)
+	
+	
+Operator Commands
+-------- --------
+
+TARA normally runs as a started task, and allows the system operator to control
+and stop it via the operator commands MODIFY and STOP.  TARA will normally be 
+started and controlled from the system console.  The following MVS commands are 
+used to control the execution of TARA.
+
+
+START
+
+When run as a started task, TARA is started with the operator START command. 
+Any operands on the START command are ignored.
+
+         S TARA
+
+
+MODIFY
+
+During execution, TARA can be controlled and stopped using the operator MODIFY
+command.  The operator can display the number of active sessions (the number 
+of users logged on to 3270s) with the DISPLAY operand:
+
+         F TARA,DISPLAY
+								 
+TARA can be instructed to initiate shutdown processing by using the STOP 
+operand:
+
+         F TARA,STOP
+	  
+When this form of the command is used, TARA will notify all active users that
+they should logoff, and issue a SETLOGON QUIESCE to prevent further logons.  
+Then, after the last user has logged off, TARA will shut down.  If the 
+operator wishes to terminate TARA immediately, without waiting for users to 
+logoff, the NOW modifier may be used: 'MODIFY procname,STOP,NOW'.
+
+         F TARA,STOP,NOW
+	  
+	  
+STOP
+
+The use of the 'STOP procname' command produces results identical to the 
+'MODIFY procname,STOP' command.  TARA will notify all active users that they 
+should logoff, and issue a SETLOGON QUIESCE to prevent further logons; then, 
+after the last user has logged off, TARA will shut down.  If the operator 
+wishes to terminate TARA immediately, without waiting for users to logoff, 
+the MODIFY command of the form, 'MODIFY procname,STOP,NOW', may be used.
+
+         P TARA
+	  
+	  
+
+Terminal Use
+-------- ---
+
+*** This section needs to be modified to reflect the fact that TARA
+*** now handles screen sizes larger than 24 x 80.
+
+*** Note that status indicators are now also displayed on the right
+*** -most part of the so-called "Herald" line.
+
+In order to use TARA, you need to logon from a VTAM terminal.  This
+terminal must support the 3270 data stream and the presentation space
+must have minimum dimensions of 24 lines and 80 columns. Once the
+user is logged on, the 3270 screen will be formatted into three areas.
+From top to bottom they are: the "herald" and system message area (2
+lines), the output data area (20 lines), and the input area (2 lines).
+Except for the input area, the entire screen is protected from input.
+
+The "herald" is simply a line which says "TARA - Time-sharing
+Applications Remote Access".  System messages consist of error or
+status messages from TARA.  For example, when the user first logs on,
+the message "LOGON COMPLETE." is displayed.  Any message in this area
+will be blanked out if the user enters data or null input, or presses
+"CLEAR".  Almost all commands will cause a message of some sort to be
+displayed here, either to inform the user that the command was accepted
+and acted upon, or to inform the user that the command was not
+processed, and why.  System messages may be displayed asynchronously,
+that is, at any point in time.  For example, if the user enters a
+CONNECT command, the message "CONNECTION IN PROGRESS" will be
+displayed, and the keyboard will be unlocked.  If the connection
+attempt then fails, a message to that effect will be displayed at the
+time the failure is detected, perhaps five seconds later.
+
+The output data area is where data entered by the user is redisplayed
+or "echoed", and where data from the time-sharing service is displayed.
+This area will hold up to 19 lines of information. The 20th line is
+occupied by a "separator" line which always follows the most recently
+generated line of data.  Like the system message area, this area may be
+written to at any time.
+
+The input area consists of the word "INPUT:" followed by 152
+unprotected positions into which the user may type.
+
+TARA commands can be entered at any time. If there is no active session
+with a remote host, commands can be entered using the ENTER key.
+However, when in session with a remote host, any data entered using the
+ENTER key is assumed to be data, and is sent to the remote host. At
+this time, if you want TARA to interpret your input as a TARA command
+you must use PF3 or PF15 to enter the command.
+
+Also, when in session, PF10 or PF22 will send the entered data without
+a carriage return (data sent by ENTER will have a carriage return
+appended to it).
+
+
+CALL
+
+----------------------------------------------------------------------
+  CALL hostname
+----------------------------------------------------------------------
+
+The CALL command is used to initiate a connection to a remote
+time-sharing system. 'hostname'  is an alias assigned to a group of
+LUs in the Host Alias/Address Table.
+
+When there is an active session with a remote host, an 'S' is displayed
+in the upper right corner of the screen.
+
+*** DIAL is a synonym for CALL.
+
+DELIMIT
+
+----------------------------------------------------------------------
+  DELIMIT sepchar
+----------------------------------------------------------------------
+
+The DELIMIT command lets you specify what character the separator line
+will contain.  'sepchar' is a single character which you want the
+separator line to be composed of instead of the currently defined
+character.  The default 'sepchar' is a dash.
+
+Some programs use lines of dashes as part of their formatting; these
+lines look exactly like the separator line, and so can be confusing.
+This command lets you change the appearance of the separator line
+in these cases.
+
+This is synonomous with the SEPCHAR command.
+
+
+DROP
+
+----------------------------------------------------------------------
+  DROP
+----------------------------------------------------------------------
+
+The DROP command is used to end a session established with the CALL
+command.  The user remains logged on to TARA and may issue further
+commands.  Remember that when in session, PF1 must be pressed to
+identify the input as a TARA command.  If the ENTER key is pressed, the
+DROP command will be sent to the remote host as data.
+
+This command is synonomous with the HANGUP command.
+
+
+ERASE
+
+----------------------------------------------------------------------
+  ERASE  { ON | OFF }
+----------------------------------------------------------------------
+
+Normally, when the data received from the remote host exceeds the
+capacity of the screen, "wrap" occurs.  That is, the latest data is
+written over the oldest data on the screen.  You can cause the entire
+data area of the screen to be cleared first, by issuing the ERASE ON
+command.  When the erase option on, this is indicated by an 'E' in the
+upper right corner of the display.  The erase option can be turned off
+by issuing the ERASE OFF command.
+
+The erase option cannot be chosen if the WRAP option is on, since if
+a data packet is received which would span screens, and both WRAP and
+ERASE were on, the first part of the packet would never be displayed.
+
+
+HANGUP
+
+----------------------------------------------------------------------
+  HANGUP
+----------------------------------------------------------------------
+
+The HANGUP command is used to end a session established with the CALL
+command.  The user remains logged on to TARA and may issue further
+commands.  Remember that when in session, PF1 must be pressed to
+identify the input as a TARA command.  If the ENTER key is pressed, the
+HANGUP command will be sent to the remote host as data.
+
+This command is synonomous with the DROP command.
+
+*** A section should be added to describe the HELP command.  Note
+*** that the self-documented HELP commandname has not been implemented
+*** for all commands.
+
+
+LOGOFF
+
+----------------------------------------------------------------------
+  LOGOFF
+----------------------------------------------------------------------
+
+The LOGOFF command is used to disconnect from TARA.  Any active calls
+will be terminated.
+
+
+NAME
+----------------------------------------------------------------------
+  NAME
+----------------------------------------------------------------------
+
+The NAME command causes the node name of the issuing terminal to be
+displayed on the system message line, after the message identifier
+XTA2201.
+
+
+SAVE
+
+----------------------------------------------------------------------
+  SAVE { ON | OFF | AS tsoid qualifier }
+----------------------------------------------------------------------
+
+The SAVE command is used to capture message traffic occuring on the
+session with the remote time-sharing system.  To begin capturing data,
+the SAVE AS form of the command must be used.  The dataset name given
+to the capture dataset is built by appending the tsoid and qualifier
+supplied in the command to 'TARATEXT', creating a dataset name in the
+form 'tsoid.TARATEXT.qualifier'.  This is the dataset in which session
+traffic will be captured.  The SAVE OFF form of the command is used to
+suspend the capture of session traffic; SAVE ON resumes the capturing
+suspended by SAVE OFF.
+
+Once SAVE AS has been issued, all data from all CALLs will be saved in
+the same dataset.  The dataset remains allocated and open even after
+SAVE OFF has been issued; it is closed and freed only at LOGOFF.
+Therefore, SAVE AS can be issued only once per TARA session.
+
+When data traffic is being captured, a 'C' is displayed in the upper
+right corner of the screen.
+
+*** The capture dataset is dynamically allocated in the module XTACPTT.
+*** The SVC 99 (dynamic allocation) request block parameters are coded
+*** in source member XTAS99P.  This is a likely candidate for
+*** customization and these parameters should be supplied from the
+*** OPTIONS macro at some future date.
+
+
+SEPCHAR
+
+----------------------------------------------------------------------
+  SEPCHAR sepchar
+----------------------------------------------------------------------
+
+The SEPCHAR command lets you specify what character the separator line
+will contain. 'sepchar' is a single character which you want the
+separator line to be composed of instead of the currently defined
+character.  The default  sepchar  is a dash.
+
+Some programs use lines of dashes as part of their formatting; these
+lines look exactly like the separator line, and so can be confusing.
+This command lets you change the appearance of the separator line
+in these cases.
+
+This is synonomous with the DELIMIT command.
+
+
+WRAP
+----------------------------------------------------------------------
+  WRAP  { ON | OFF }
+----------------------------------------------------------------------
+
+The WRAP command lets you specify whether output should be stopped
+when it reaches the last line of the screen.  In some instances, it
+may be desirable to let the data from the remote host continue without
+pause.  In this case, you can issue the WRAP ON form of the command.
+If you wish to reverse the action of this command, simply issue the
+WRAP OFF form.
+
+The default is WRAP OFF.
+
+When WRAP OFF is in effect, when data is received which would cause
+data at the top of the screen to be overwritten, the message
+'MORE...' is displayed in the lower right corner of the screen, and
+output is halted until the ENTER key is pressed.  If data was
+entered into the input area of the screen while 'MORE...' is displayed,
+the input is not processed when the ENTER key is pressed; instead, it
+is retained in the input area and can be modified before sending.
+
+When WRAP ON is in effect, data is displayed as it is recieved, without
+pause, and a 'W' is continuously displayed in the upper right corner of
+the screen.
+
+WRAP cannot be turned on if the ERASE option is already on.
+
+*** Notice should be given that invoking the HELP facility causes
+*** the WRAP option to be turned on and ERASE to be turned off.
+
+
+System Commands
+------ --------
+
+All the 'system' commands of TARA start with !! and end with a period.
+For example, the CLOSE system command would be entered as '!!CLOSE.'.
+
+CLOSE
+
+The CLOSE command sets an indicator in common storage which MAIN
+checks whenever the session count goes to zero. If this indicator is
+set, MAIN initiates shutdown processing.  Note that this is not the
+same as the operator STOP command.  The operator STOP command also
+causes a SETLOGON QUIESCE to be issued, and sends a message to each
+user indicating that TARA is being shut down.  The effect of the
+CLOSE command is reversible (see UNCLOSE); the STOP command is not.
+
+UNCLOSE
+
+UNCLOSE resets the indicator set by CLOSE. Since CLOSE does no other
+processing than setting this indicator, its action can be reversed at
+any time before the session count decreases to zero (i.e. as long as
+there is someone still logged on).
+
+ABEND
+
+Issuing the ABEND command will cause a user abend to occur, and storage
+to be dumped. The abend is issued via the ABEND macro in XTASCMD. This
+may be useful for debugging purposes, but be aware that session storage
+for the session issuing the ABEND command will have been changed, and
+the phase trace area will have been updated by the normal processing
+which takes place in processing input from the primary session.
+
+NAME
+
+The NAME system command displays the node name of the issuing LU.
+
+BASE
+
+BASE sets the origin address of subsequent SHOW commands. Three formats
+are possible: '!!BASE.,COMMON' sets the origin to the beginning of
+TARA's common storage area; '!!BASE.,SESSION' sets the origin to the
+beginning of session storage for the issuing session; and
+'!!BASE.,hexaddr' sets the origin to the specified address. 'hexaddr'
+is a hexadecimal number, up to 8 digits long. No special characters are
+required to indicate that is is hexadecimal; leading zeroes need not be
+entered.
+
+Note that though !!BASE.,SESSION sets the origin address to session
+storage for the issuing LU, it is possible to examine session storage
+for other sessions by looking at the forward/backward pointers in the
+first two words of session storage, and then issuing !!BASE.,hexaddr
+using those addresses.  You can also use DSECT addresses for VTAM
+control blocks by first setting to origin to the address of the control
+block.
+
+SHOW
+
+SHOW displays 16 bytes in both hexadecimal and character format at the
+specified location. The location is specified on the SHOW command as
+follows: '!!SHOW.,hexaddr'. 'hexaddr' is an offset from the address
+specified in the BASE command. If a BASE command was never issued, the
+origin is location 0.
+
+*** WARNING!  No protection mechanism has been implemented to recover
+*** from 0C4 ABENDs caused by SHOW commands directed at fetch-protected
+*** storage.
+
+
+ABENDS
+------
+
+With one exception, ABENDS are issued only from the mainline, XTAMAIN.
+As with message numbers, the ABEND code reflects the issuing module and
+phase.
+
+
+ABEND CODE
+(decimal)         Reason for ABEND
+----------        -------------------------------------------------
+   0101           Load of Host Alias Table failed.  The return code
+                  from the LOAD for the Host Alias Table was nonzero.
+                  Check that the HALT was created; that it is correctly
+                  named (XTAHALT); that it is in a library in the
+                  JOBLIB, STEPLIB, or LNKLST.
+   0105           Open of VTAM ACB failed.  The return code from the
+                  OPEN for TARA's ACB was nonzero.  Check that the
+                  APPL was defined; that the major node containing
+                  the APPL definition is active; that the APPL label
+                  field or ACBNAME operand is the same as that used
+                  in TARA's ACB ('TARA').
+   0106           SETLOGON failed.  After successfully opening the ACB,
+                  a SETLOGON OPTCD=START is issued to allow logons to
+                  be processed.  The return code from this SETLOGON
+                  was nonzero.
+   2100           This ABEND is issued in the system command processor
+                  module (XTASCMD).  This is an abend explicitly
+                  requested by the '!!ABEND.' command, presumably for
+                  debugging purposes.
+
+
++---------------------------------------------------------------------+
+| TARA - Timesharing Applications Remote Access                       |
+| XTA0402 REQUESTED CONNECTION ESTABLISHED.                           |
+|call isss                                                            |
+|                                                                     |
+|                                                                     |
+|  03CSV                                                              |
+|                                                                     |
+|Host Name:  cps                                                      |
+|                                                                     |
+|User ID: 20054.600,tty                                               |
+|Password: tara                                                       |
+|                                                                     |
+|Account ID: jack                                                     |
+|                                                                     |
+|Job 20 on ISSS COMPUTER NETWORK at 17:48 EDT 9-Jul-84 on T03QBA      |
+|---------------------------------------------------------------------|
+|                                                                     |
+|                                                                     |
+|                                                                     |
+|                                                                     |
+|                                                                     |
+|                                                                     |
+| INPUT:                                                              |
+|                                                                     |
++---------------------------------------------------------------------+
+
+
+
+
+===============================================================================
+                          PART 2 - TARA Internals
+===============================================================================
+
+The X.25 protocol is not entirely compatible with the TTY protocol: in fact, it 
+is closer to SNA protocol. This presents some problems for the implementor of a 
+TTY/X.25 protocol converter.  For example, there is no well-defined end-of
+-message indicator in ASCII.  Also, TTY protocol is completely full duplex. So,
+when do you send a packet? (An X.25 packet is roughly equivalent to an SNA 
+PIU.) How do you know when one of the parties is done talking?  The answer 
+really is, 'that is not a meaningful question; neither party is done talking 
+until the user logs off.' Either participant can talk at any time, and can send 
+as much or as little data as they want. In TTY protocol, characters are sent
+individually; they are not packaged up and sent together in a well-defined 
+'message', as in X.25 or SNA. The conversion *must* be made, though, and the 
+question 'what constitutes a message?' must be asked. The answer turns out to 
+be  rather more complex than we might hope. It revolves around three issues: 
+packet size, control characters, and timers. Lets look at each of these.
+
+Packet size
+
+A given X.25 network is designed to handle packets of a certain maximum size. 
+For example, Telenet will accept packets with up to 128 bytes of data. Once a 
+PAD has accumulated enough data to completely fill a packet, that packet is 
+forwarded into the network, regardless of any other prevailing conditions.
+
+Control Characters
+
+Certain control characters can be defined as an indication that the data 
+accumulated in the PAD is to be forwarded into the network. Carriage return 
+(CR) is commonly used for this purpose. CR is always used at the end of a 
+line, and is usually (but not always) used at the 'end' of a message.  There 
+is no way to tell how it is being used, so the receiver has no way of knowing 
+whether the talker has finished. Other characters may be defined as packet
+-forwarding indicators (such characters are included in the forwarded packet).
+
+Timers
+
+It is possible to request that packets be forwarded a certain interval of time 
+after a packet has been begun, or after a certain amount of idle time.
+
+Note that all three of these methods of determining when to send a packet can 
+result in incomplete messages being sent. The second method (control 
+characters) is most likely to produce the desired result, since it isn't too 
+difficult to handle a line of data as a complete message.
+
+
+TARA Coding Conventions
+---- ------ -----------
+
+Register Usage
+-------- -----
+
+Registers are used as shown below in all routines. Registers 3-8 are
+available for use as needed.
+
+    R0  -  Temporary use only (used in macro expansions)
+    R1  -  Temporary use only (used in macro expansions)
+    R2  -  Temporary use only (altered by machine instructions)
+    R3  -
+    R4  -
+    R5  -
+    R6  -
+    R7  -
+    R8  -
+    R9  -  --> RPL (in RPL exits)
+    R10 -  --> Common storage
+    R11 -  --> Session storage (except in mainline)
+    R12 -  Base register
+    R13 -  Savearea pointer
+    R14 -  Return address
+    R15 -  Entry address / Return code
+	
+Most registers are prepared by PROLOGUE:
+
+ -  Registers 12-15 are always prepared by PROLOGUE.
+ -  Register 10 is prepared in all routines except the mainline.
+ -  Registers 9 and 11 are prepared when EXIT=RPL is specified.
+ 
+ 
+Macros
+
+The PROLOGUE macro provides symbolic register equates; generates an
+eyecatcher containing the module name, the assembly date and time, and
+a short description of the routine; establishes addressability within
+the module and for applicable DSECTs; acquires a savearea using
+GETMAIN. Additionally, in the mainline an eyecatcher is generated which
+contains the relocated address of the common storage area; and in RPL
+exits, a check is made to determine whether TPEND has occurred, and a
+branch is immediately taken to EPILOGUE if it has.
+
+                       MAIN  SUBR  LERAD  LOGON  LOSTERM  RPL  SYNAD  TPEND
+     Eyecatcher
+       Module name       X     X     X      X       X      X     X      X
+       Date and Time     X     X     X      X       X      X     X      X
+       Description       X     X     X      X       X      X     X      X
+       A(XTACMAP)        X
+     Addressability
+       Module            X     X     X      X       X      X     X      X
+       RPL                           X                     X     X
+       Session Store           X     X                     X     X
+       Common Store      X     X     X      X       X      X     X      X
+     Check for TPEND                                       X
+     Savearea            X     X     X      X       X      X     X      X
+     Registers saved     X     X
+
+The syntax of PROLOGUE is:
+                                      +-       -+
+                                      | LERAD   |
+                                      | LOGON   |
+      name     PROLOGUE  MAIN | EXIT= | LOSTERM | | SUBR=name
+                                      | RPL     |
+                                      | SYNAD   |
+                                      | TPEND   |
+                                      +-       -+
+
+The EPILOGUE macro complements PROLOGUE. Its syntax is simply:
+
+               EPILOGUE
+
+The PHASE macro is used to begin each phase as documented in the logic
+flow. The syntax of the PHASE macro is:
+
+               PHASE n.n  comment
+						  
+'n.n' corresponds to the id (routine number.step number) of the phase
+being entered. 'comment' is the description of the phase from the logic
+flow document.  ALL routines must begin with PROLOGUE and end with
+EPILOGUE. There must be only one PROLOGUE and one EPILOGUE macro in
+each routine. All exit code must use the same EPILOGUE - in other
+words, always terminate the routine by branching to the last step in
+the routine. The first PHASE macro must be preceded by the PROLOGUE.
+
+
+Message Numbers
+
+All messages issued by this program, whether issued to the terminal
+user or the system operator, will be identified by a message number in
+the format, 'XTAssss', where ssss is the routine and step number of the
+step issuing the message.
+      
+RPL Usage
+--- -----
+
+There are 3 RPLs: the "Primary" and "Secondary" RPLs, which are used
+for one-way data traffic between the terminal and the remote host
+host system; and the "Echo" RPL, which is used for communications from
+TARA to the terminal.
+
+                             +-----+
+                             | PRI |
+                       +---->| RPL |-----+
+       (3270)          |     +-----+     |         (NPSI)
+     +--------+        |                 |       +--------+
+     |        |--------+                 +------>|        |
+     |  PRI   |                                  |  SEC   |
+     |  SLU   |                                  |  SLU   |
+     |        |<-------+                 +-------|        |
+     +--------+        |                 |       +--------+
+       A               |     +-----+     |
+       |               +-----| SEC |<----+
+       |                     | RPL |
+       |                     +-----+
+     +-----+
+     | ECHO|
+     | RPL |
+     +-----+
+
+
+Data Structures
+---- ----------
+
+QUEUES
+
+There are a number of queue data structures implemented in TARA.  All
+of them can eventually be traced back to Common Storage.  Most queues
+are session related and as such are anchored in Session Storage
+(the Session Storage Area is sometimes referred to as a Session Data
+Block or SDB).  Session Storage is itself organized as a queue which is
+anchored in Common Storage.  A queue is composed of a Queue Anchor
+Block (QAB), and the elements in the queue.  The QAB is comprised of
+an optional lock word, and pointers to the first and last Queue
+Elements (QELs).  Each QEL in turn contains pointers to the next and
+previous QELs.  The first QEL's "previous" pointer is zero; similarly,
+the last QEL's "next" pointer is also zero.  In an empty queue, the
+QAB's pointers are both zero.
+
+Here is an example of a queue with no QELs:
+
+                 QAB
+            +------------+
+      Lock  |        0   |
+            +------------+
+  -> First  |        0   |
+            +------------+
+   -> Last  |        0   |
+            +------------+
+
+A queue with one QEL would look like this:
+
+                 QAB
+            +------------+
+      Lock  |        0   |
+            +------------+
+  -> First  |            |-------+----->+------------+
+            +------------+       |      |        0   |
+   -> Last  |            |-------+      +------------+
+            +------------+              |        0   |
+                                        +------------+
+                                        |      .     |
+                                               .
+                                               .
+
+A queue with more than one QEL would look like this:
+
+                 QAB
+            +------------+
+      Lock  |        0   |
+            +------------+
+  -> First  |            |------+------>+------------+
+            +------------+      |       |            |---+
+   -> Last  |            |---+  |       +------------+   |
+            +------------+   |  |       |        0   |   |
+                             |  |       +------------+   |
+                             |  |       |      .     |   |
+                             |  |              .         |
+                             |  |              .         |
+                             |  |                        |
+                             |  |                        |
+                             |  |   +-->+------------+<--+
+                             |  |   |   |            |
+                             |  |   |   +------------+
+                             |  +---|---|            |---+
+                             |      |   +------------+   |
+                             |      |   |      .     |   |
+                             |      |          .         |
+                             |      |          .         |
+                             |      |                    |
+                             |      |                    |
+                             +------|-->+------------+<--+
+                                    |   |        0   |
+                                    |   +------------+
+                                    +---|            |
+                                        +------------+
+                                        |      .     |
+                                               .
+                                               .
+
+
+COMMAND DESCRIPTOR BLOCK
+
+Input received from the 3270 and determined to be a command is first
+parsed by XTAPRRX before being passed to the appropriate command
+processor routine.  The parsed command is described by a Command
+Descriptor Block (CDB).  The CDB is a byte-organized self-describing
+structure.  Input is described in terms of "words".  The first byte
+of the CDB contains a number which corresponds to the number of
+"words" in the CDB.  Subsequent to this first byte, the CDB contains
+the parsed "words" themselves, which consist of a length byte
+followed by that number of characters.  The first "word" in the CDB
+is the AID byte which was received from the 3270, which always has
+a length of 1.  Here is an example of the command "call cps" after
+parsing into a CDB:
+
+            +-------+
+            |   3   |
+            +-------+-------+
+            |   1   |   '   |
+            +-------+-------+-------+-------+-------+
+            |   4   |   C   |   A   |   L   |   L   |
+            +-------+-------+-------+-------+-------+
+            |   3   |   C   |   P   |   S   |
+            +-------+-------+-------+-------+
+			
+The single quote which comprises the first word is the AID returned for
+ENTER.  All alphabetics are first translated to upper case.  Blanks
+are used to determine word boundaries, and are eliminated in the
+process.  No distinction is made between alphabetics, numerics, or
+special characters -- the only characters with special meanings are
+blanks.
+
+The command processor now need only look at a fixed location for its
+operand(s).  If a command has more than one name, then the operand
+location can be determined by using the length of the command name
+(the second word) as an offset.  Note especially, that commands and
+operands may be matched unambiguously if the length byte is loaded
+into a register and followed by an executed compare which includes the
+length byte itself as part of the compared field.
+
+Subroutine Linkage
+---------- -------
+
+LOGR Routine Linkage:
+     +------------+
+     |     R14    |<-----Link Register
+     +------------+
+     +------------+
+     |     R1     |--+
+     +------------+  |
+                     |
+                     |
+                     |
+                     V 1 Byte   1 Byte
+                     +--------+--------+----------//----------+
+                     |        |        |                      |
+                     +--------+--------+----------//----------+
+                      ----+--- ----+--- <---------LL--------->
+                          |        |
+                          |        |     Maximum length of 256
+                          |        |
+                          |        Length of data (LL)
+                          |
+                          Record type:
+                          00 - Status (unformatted)
+                          01 - Error (unformatted)
+                          02 - Error (formatted)
+                          04 - Statistics (formatted)
+						  
+Unformatted messages have the following standard prefix:
+
+              PPSSMMMMLLLLLLLL
+              |   |   |
+              |   |   LU name (optional)
+              |   |
+              |   Last 4 characters of issuing module name
+              |
+              Phase and step number
+			  
+PSM Routine Linkage
+
+     +------------+
+     |     R14    |<-----Link Register
+     +------------+
+     +------------+
+     |     R1     |--+
+     +------------+  |                     Message format must be:
+                     |                     'XTApppp text.', where
+                     |                     'pppp' is phase id.
+                     |                     |
+                     V 1 Byte   1 Byte  ---+---
+                     +--------+--------+----------//----------+
+                     |        |        |                      |
+                     +--------+--------+----------//----------+
+                    /        / ----+--- <---------LL--------->
+                  /         /      |
+                /          /       |     Maximum length of 160
+              /           /        |
+            /            /         Length of data (LL)
+          /             /
+        /              /
+      /               /
+    +-----------------+
+    | . . . . . T T T |
+    +-----------------+
+                --+--
+                  |
+                  |
+                  Type of request:
+                     000 - Initial screen
+                     001 - System message
+                     010 - Echo
+                     011 - Data
+
+					 
+TARA Logic Flow
+---- ----- ----
+
+                      XTAMAIN - 1.0               MAINLINE
+                      +----------------------------------+
+                      |                                  |
+             START -->|  0. PROLOGUE                     |
+                      |                                  |
+                      |  1. LOAD host alias table        |
+                      |                                  |
+                      |  2. OPEN log and snap dcbs       |
+                      |                                  |
+                      |  3. (null phase)                 |
+                      |                                  |
+                      |  4. establish link to comm task  |
+                      |     (EXTRACT/QEDIT)              |
+                      |                                  |
+                      |  5. OPEN vtam acb                |
+                      |                                  |
+                      |  6. SETLOGON optcd=start         |
+                      |                                  |
+                      |  7. clear ecbs                   |
+                      |                                  |
+                      |  8. log successful startup       |
+                      |                                  |
+                      |  9. WAIT 1,cs#ecbl               |
+                      |                                  |
+                      +----------------------------------+
+                      |                                  |
+               POST-->| 10. dispatch event handler       |
+                      |                                  |
+                      +----------------------------------+
+                      |                                  |
+   TPEND ECB POSTED-->| 20. log tpend acknowledgement    +----> 1.90
+   (from 1.11)        |                                  |
+                      +----------------------------------+
+                      |                                  |
+    IDLE ECB POSTED-->| 30. clear the idle ecb,          |
+    (from 1.11)       |     log idleness                 |
+                      |                                  |
+                      | 31. if not in shutdown mode      +----> 1.9
+                      |                                  |
+                      | 32. write shutdown log record    +----> 1.90
+                      |                                  |
+                      +----------------------------------+
+                      |                                  |
+ COMTASK ECB POSTED-->| 40. log the operator command     |
+ (from 1.11)          |                                  |
+                      | 41. process according to verb    |
+                      |       modify                     +----> 1.42
+                      |       stop                       +----> 1.45
+                      |                                  |
+                      | 42. parse the modify request     |
+                      |       stop now                   +----> 1.90
+                      |       stop                       +----> 1.45
+                      |       display                    +----> 1.44
+                      |                                  |
+                      | 43. WTO 'invalid command'        +----> 1.48
+                      |                                  |
+                      | 44. display session stats        +----> 1.48
+                      |                                  |
+                      | 45. if stop in progress, WTO     +----> 1.48
+                      |                                  |
+                      | 46. turn on stopped flag         |
+                      |     WTO 'shutdown initiated'     |
+                      |     SETLOGON optcd=quiesce       |
+                      |     notify users                 |
+                      |                                  |
+                      | 47. log the stop                 |
+                      |     wto # active sessions        |
+                      |                                  |
+                      | 48. QEDIT reset cib              +----> 1.9
+                      |                                  |
+                      +----------------------------------+
+                      |                                  |
+                      | 90. WTO 'shutdown in progress'   |
+                      |                                  |
+                      | 91. CLOSE vtam acb               |
+                      |                                  |
+                      | 92. CLOSE log and snap dcbs      |
+                      |                                  |
+                      | 93. return                       +---->
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTALOGX - 2.0             LOGON EXIT
+					  +----------------------------------+
+                      |                                  |
+              CINIT-->| 1. GETMAIN session storage       |
+                      |                                  |
+                      | 2. initialize session storage    |
+                      |                                  |
+                      | 3. GENCB 1 nib and 4 rpls        |
+                      |                                  |
+                      | 4. INQUIRE sessparm to get bind  |
+                      |                                  |
+                      | 5. INQUIRE devchar               |
+                      |                                  |
+                      | 6. if unacceptable bind/devchar  +---+
+                      |                                  |   |
+                      | 7. OPNDST accept,asy,spec        |   |
+                      |                                  |   |
+                      | 8. log logon event               +---|-->
+                      |                                  |   |
+                      |                                  |   |
+                      | 9. CLSDST spec,release           |<--+
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAOPRX - 3.0    OPNDST PRI RPL EXIT
+                      +----------------------------------+
+      OPNDST          |                                  |
+      PRI COMPLETES-->| 1. CHECK rpl                     |
+                      |                                  |
+                      | 2. psm(initial screen)           |
+                      |                                  |
+                      | 3. issue initial RECEIVE to      |
+                      |    primary                       |
+                      |                                  |
+                      | 4. increment session count       |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAOSRX - 4.0    OPNDST SEC RPL EXIT
+                      +----------------------------------+
+      OPNDST          |                                  |
+      SEC COMPLETES-->| 1. CHECK rpl                     |
+                      |                                  |
+                      | 2. update session storage        |
+                      |                                  |
+                      | 3. psm(session established)      |
+                      |                                  |
+                      | 4. issue initial RECEIVE to      |
+                      |    secondary                     |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAPRRX - 5.0   PRI RECEIVE RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+  RECEIVE completes-->| 1. CHECK rpl                     |
+                      |    if sscp logoff or clsdst      +------>
+                      |                                  |
+                      | 2. strip 3270 formatting         |
+                      |                                  |
+                      | 3. if aid=pf1                    +----+
+                      |                                  |    |
+                      | 4. if hold=yes, set hold=no      |    |
+                      |    and re-issue RECEIVE          |    |
+                      |                                  |    |
+                      | 5. call psm(echo)                |    |
+                      |                                  |    |
+                      | 6. twx-ize the data              |    |
+                      |                                  |    |
+                      | 7. call data capture routine     |    |
+                      |                                  |    |
+                      | 8. SEND to secondary             |    |
+                      |                                  |    |
+                      | 9. increment 'send' count        +----|-->
+                      |                                  |    |
+                      |                                  |    |
+                      | 10. parse command                |<---+
+                      |                                  |
+                      | 11. call command processor       |
+                      |                                  |
+                      | 12. if command was not logoff    |
+                      |     reissue RECEIVE on primary   |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAACQR - 6.0        ACQUIRE ROUTINE
+                      +----------------------------------+
+                      |                                  |
+Called by R.R. exit-->| 1. if secondary already active   +------>
+                      |                                  |
+                      | 2. find lu for requested host    |
+                      |                                  |
+                      | 3. issue OPNDST for secondary    |
+                      |                                  |
+                      | 4. psm(connect in progress)      |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTALOGF - 7.0         LOGOFF ROUTINE
+                      +----------------------------------+
+                      |                                  |
+Called by R.R. exit-->| 1. log logoff event              |
+                      |                                  |
+                      | 2. CLSDST primary                |
+                      |                                  |
+                      | 3. release any capture dataset   |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASRRX - 8.0  SECY RECEIVE RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+  RECEIVE completes-->| 1. CHECK the rpl                 |
+                      |                                  |
+                      | 2. determine packet type         |
+                      |    if data packet                +---+
+                      |                                  |   |
+                      | 3. process pad commands          |---|--->
+                      |                                  |   |
+                      | 4. call data capture routine     |<--+
+                      |                                  |
+                      | 5. call psm(inbound data)        |
+                      |                                  |
+                      | 99. exit                         +------->
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTADROP - 9.0      DROP SECY ROUTINE
+                      +----------------------------------+
+                      |                                  |
+Called by R.R. exit-->| 1. if no secondary               +------>
+                      |                                  |
+                      | 2. log the event                 |
+                      |                                  |
+                      | 3. CLSDST the secondary          |
+                      |                                  |
+                      | 4. call psm(drop in progress)    |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAPSMR - 10.0   PRIMARY SCREEN MGMT
+                      +----------------------------------+
+                      |                                  |
+   Entered via call-->| 1. if null request               +---------+
+                      |                                  |         |
+                      | 2. allocate and initialize a     |         |
+                      |    send buffer                   |         |
+                      |                                  |         |
+                      | 3. process options               |         |
+                      |    - clear input area            |         |
+                      |    - sound audible alarm         |         |
+                      |    - go to new line              |         |
+                      |                                  |         |
+                      | 4. dispatch required formatter   +---+     |
+                      |                                  |   |     |
+                      | ECHO:                            |   |     |
+                      | 5. exit hold mode                |<--+     |
+                      |                                  |   |     |
+                      | DATA:                            |   |     |
+                      | 6. put message in data area of   |<--+     |
+                      |    screen                        +---|--+  |
+                      |                                  |   |  |  |
+                      | INITIAL:                         |   |  |  |
+                      | 7. insert screen format into     |<--+  |  |
+                      |    buffer                        |   |  |  |
+                      |                                  |   |  |  |
+                      | SYSMSG:                          |   |  |  |
+                      | 8. insert data + formatting at   |<--+  |  |
+                      |    buffer pointer                |      |  |
+                      |                                  |      |  |
+                      | 9. finish preparing the buffer   |<-----+  |
+                      |                                  |         |
+                      | 10. process first waiter         |<--------+
+                      |                                  |
+                      | 11. SEND to primary              |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASNRX - 11.0         SEND RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+     SEND COMPLETES-->| 1. CHECK the rpl                 |
+                      |    if bracket error reSEND       +------>
+                      |    if LU lost                    +---+
+                      |                                  |   |
+                      | 2. if primary rpl, issue RECEIVE |   |
+                      |    on primary                    +------>
+                      |                                  |   |
+                      | 3. if secondary rpl, issue       |   |
+                      |    RECEIVE on secondary          |   |
+                      |    if cid unknown                |---|-+
+                      |                                  |   | |
+                      | 4. dequeue buffer for completed  |<--+ |
+                      |    send to primary               |     |
+                      |    dispatch next waiter          +------>
+                      |                                  |     |
+                      | 5. invoke clnp for this session  |<----+
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTAEKOX - 12.0    ECHO SEND RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+     SEND COMPLETES-->| 1. CHECK the rpl                 |
+                      |    if ok                         +---+
+                      |    if lu gone                    +---|-->
+                      |    if bracket error...           |   |
+                      |                                  |   |
+                      | 2. retry SEND with bbi inverted  +---|-->
+                      |                                  |   |
+                      | 3. dequeue the buffer            |<--+
+                      |                                  |
+                      | 4. call psm(null) to dispatch    |
+                      |    next waiter                   |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTACLDX - 13.0       CLSDST RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+   CLSDST COMPLETES-->| 1. CHECK the rpl                 |
+                      |                                  |
+                      | 2. dispatch appropriate handler  +---+
+                      |                                  |   |
+                      | primary:                         |<--+
+                      | 3. update session storage        |   |
+                      |    CLSDST secondary if needed    +---|-->
+                      |                                  |   |
+                      | secondary:                       |<--+
+                      | 4. free lu in halt               |
+                      |    log session statistics        |
+                      |    if primary session remains    +------>
+                      |                                  |
+                      | 5. free session storage          |
+                      |    if session count 0 issue POST |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTALOGR - 14.0       LOGGING ROUTINE
+                      +----------------------------------+
+                      |                                  |
+              BALR -->| 1. time-stamp the message        |
+                      |                                  |
+                      | 2. write the message to the log  |
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTALSTX - 15.0          LOSTERM EXIT
+                      +----------------------------------+
+                      |                                  |
+       SESSION LOST-->| 1. log the losterm event         |
+                      |    if action code X'18', exit    +------>
+                      |    branch on lost-session        |
+                      |                                  |
+                      | lost primary:                    |
+                      | 2. CLSDST the primary            +------>
+                      |                                  |
+                      | lost secondary:                  |
+                      | 3. CLSDST the secondary          |
+                      |                                  |
+                      | 4. call psm(lost secondary)      +------>
+                      |                                  |
+                      | niether                          |
+                      | 5. WTO(spurious losterm)         |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTATPNX - 16.0            TPEND EXIT
+                      +----------------------------------+
+                      |                                  |
+              TPEND-->| 1. WTO(tpend acknowledgement)    |
+                      |    set tpend flag                |
+                      |    POST tpend ecb                |
+                      |                                  |
+                      | 2. exit                          +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTALRDX - 17.0            LERAD EXIT
+                      +----------------------------------+
+                      |                                  |
+        LOGIC ERROR-->| 1. set lerad flag                |
+                      |                                  |
+                      | 2. if rpl was bad                |
+                      |    WTO(lerad entry, r0)          +---+
+                      |                                  |   |
+                      | 3. if error occurred in clsdst   +---|-->
+                      |                                  |   |
+                      | 4. if fdbk2 indicates unknown lu +---|-->
+                      |                                  |   |
+                      | 5. WTO(lerad entry, rtncd/fdbk2) |   |
+                      |                                  |   |
+                      | 6. delete erring session         |<--+
+                      |                                  |
+                      | 99. exit                         +------>
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASYDX - 18.0            SYNAD EXIT
+                      +----------------------------------+
+                      |                                  |
+    PERMANENT ERROR-->| 1. if invalid rpl                |
+                      |                                  |
+                      | 2. dispatch error handler        |
+                      |                                  |
+                      | exception req/resp:              |
+                      | 3. if error is allowable         +------>
+                      |                                  |
+                      | retriable:                       |
+                      | 4. EXECRPL to retry              +------>
+                      |                                  |
+                      | data integrity:                  |
+                      | 5. if data or secondary lu loss  +------>
+                      |                                  |
+                      | environment                      |
+                      | 6. End sessions (18.13)          +------>
+                      |                                  |
+                      | 12. ABEND                        |
+                      |                                  |
+                      | 13. SUBR called by 18.7          |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTACLNP - 19.0       CLEANUP ROUTINE
+                      +----------------------------------+
+                      |                                  |
+               BALR-->| 1. Inform operator of session    |
+                      |    failure                       |
+                      |                                  |
+                      | 2. Log error information         |
+                      |                                  |
+                      | 3. Take snapshot of SDB          |
+                      |                                  |
+                      | 4. Initiate cleanup process with |
+                      |    CLSDST of primary             |
+                      |                                  |
+                      | 99. exit                         +-------->
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTARCVY - 20.0      RECOVERY ROUTINE
+                      +----------------------------------+
+                      |                                  |
+               BALR-->| 1. Write initial screen          |
+                      |                                  |
+                      | 2. Log error information         |
+                      |                                  |
+                      | 99. exit                         +-------->
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASCMD - 21.0   !!COMMAND PROCESSOR
+                      +----------------------------------+
+                      |                                  |
+                      | No trace information is recorded |
+                      | by this routine.                 |
+                      |                                  |
+               BALR-->| 1. check that input buffer has   |
+                      |    a system command.             |
+                      |                                  |
+                      | 2. take requested action.        |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASAVE - 22.0    SAVE CMD PROCESSOR
+                      +----------------------------------+
+                      |                                  |
+               BALR-->| 1. if save on                    +-------+
+                      |    if save off                   +---+   |
+                      |                                  |   |   |
+                      | 2. ensure qualifier is valid     |   |   |
+                      |                                  |   |   |
+                      | 3. ATTACH i/o task               +---|---|---+
+                      |                                  |   |   |   |
+                      | 4. turn off capture flag         |<--+   |   |
+                      |                                  |       |   |
+                      | 5. turn on capture flag          |<------+   |
+                      |                                  |           |
+                      | 6. call psm(action taken)        |<----------+
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTACPTR - 23.0       CAPTURE ROUTINE
+                      +----------------------------------+
+                      |                                  |
+               BALR-->| 1. add new request to iobl       |
+                      |                                  |
+                      | 2. if iobl full then POST cptt   |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTACPTT - 24.0      CAPTURE I/O TASK
+                      +----------------------------------+
+                      |                                  |
+               BALR-->| 1. build svc 99 rb               |
+                      |                                  |
+                      | 2. allocate capture dataset      |
+                      |                                  |
+                      | 3. build dcb                     |
+                      |                                  |
+                      | 4. OPEN capture dataset          |
+                      |                                  |
+                      | 5. GETMAIN iobl                  |
+                      |                                  |
+                      | 6. WAIT for request              |<--+
+                      |                                  |   |
+                      | 7. WRITE and CHECK block         |   |
+                      |    if not end                    +---+
+                      |                                  |
+                      | 8. CLOSE capture dataset         |
+                      |                                  |
+                      | 9. de-allocate capture dataset   |
+                      |                                  |
+                      | 6. FREEMAIN storage              |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTACPTX - 25.0         I/O TASK ETXR
+                      +----------------------------------+
+                      |                                  |
+      I/O TASK ENDS-->| 1. if normal termination         +---+
+                      |                                  |   |
+                      | 2. call psm(failure code)        |   |
+                      |                                  |   |
+                      |                OR                |   |
+                      |                                  |   |
+                      | 3. call psm(abend code)          |   |
+                      |                                  |   |
+                      | 4. if last call clnp             |<--+
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTASCRX - 26.0     SESSIONC RPL EXIT
+                      +----------------------------------+
+                      |                                  |
+ SESSIONC COMPLETES-->| 1. CHECK rpl                     |
+                      |    if request was not CLEAR      +---+
+                      |                                  |   |
+                      | 2. SESSIONC CONTROL=SDT          |---|->
+                      |                                  |   |
+                      | 3. call psm(clear screen)        |<--+
+                      |                                  |
+                      | 4. issue RECEIVE to primary      |
+                      |                                  |
+                      | 99. exit                         |
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+                      XTADFAX - 27.0            DFASY EXIT
+                      +----------------------------------+
+                      |                                  |
+      ASY DATA FLOW-->| 1. CHECK rpl                     |
+                      |                                  |
+                      | 2. if not control=signal         +---+
+                      |                                  |   |
+                      | 3. call rcvy                     |   |
+                      |                                  |   |
+                      | 99. exit                         |<--+
+                      |                                  |
+                      +----------------------------------+
+					  
+					  
+
+===============================================================================
+                      PART 3 - Reference Information
+===============================================================================
+
+All the information presented in this section is only of use if you are
+delving into the internals of the communications happening between TARA and
+the LUs (terminals and hosts) that it connects to. 
+
+
+Messages
+--------
+
+WTO Messages
+
+
+XTA0101  LOAD OF HOST ALIAS TABLE FAILED.
+
+TARA attempted to load the table which defines all the available hosts
+and what their LU names are.  The LOAD failed, probably because the
+table was not assembled or because the load library in which it resides
+is not in a STEPLIB, JOBLIB or LNKLST library.  This message is
+followed by a user 101 abend.
+
+XTA0105  ACB OPEN ERROR CODE X'xx'.
+
+When TARA issued an OPEN against its VTAM ACB, the OPEN failed.  The
+reason for the failure is given by the CODE X'xx'.  This is the ERROR
+field from the ACB.  The meaning of this field can be found in the
+VTAM Programming manual or the VTAM Reference Summary.  This message is
+followed by a user 102 abend.
+
+XTA0106  SETLOGON (START) FAILED.
+
+The ACB was successfully OPENed, but when a SETLOGON request with
+OPTCD=START was issued to allow logons, the request failed.  This
+message is followed by a user 106 abend.
+
+*******This message should be revised to provide RTNCD/FDBK2 data.
+
+XTA0108  TARA INITIALIZATION COMPLETE.
+
+All of TARA's initialization tasks has been successfully completed,
+and it is now ready to accept logons.
+
+XTA0110  MAINLINE WAIT PREMATURELY ENDED.
+
+The TARA mainline routine issues a WAIT on three ECBs: an "idle"
+ECB, which is POSTed by TARA code whenever a user logoff causes the
+session count to go to zero; a TPEND ECB which is POSTED by the TPEND
+exit; and an ECB which is POSTed by MVS when an operator MODIFY or
+STOP command is issued.  If the WAIT ended and it appears that none
+of these events caused the termination of the WAIT, then this message
+is issued, followed by a 5-second delay (a STIMER is issued), and the
+WAIT is re-issued.  The idea here is that since we have no idea what
+caused the termination of the WAIT, it may not happen again, in which
+case, we don't want to do anything drastic like ABENDing; but on the
+other hand, it could continue happening, in which case we do not want
+to deluge the operator with these messages, possibly causing a system
+hang by filling up the WTO buffers.  In short, if this message is
+issued once, ignore it; if it continues to be reissued, cancel TARA
+without delay.
+
+XTA0143  INVALID COMMAND ENTERED.
+XTA0144  TARA      -TERMLU- -HOSTLU- -PKTS-
+XTA0144  TARA      termname hostname  ##### suspended
+XTA0144  TARA NUMBER OF ACTIVE SESSIONS IS xxx.
+XTA0145  STOP IS IN PROGRESS.
+XTA0145  STOP REQUEST ACKNOWLEDGED.
+XTA0190  SHUTDOWN IN PROGRESS.
+XTA0201  LOGON FAILED - UNABLE TO GETMAIN SESSION STORAGE.
+XTA0207  OPNDST ACCEPT FOR PRIMARY LOGON FAILED.
+XTA0303  INITIAL RECEIVE TO PRIMARY FAILED.
+XTA1505  LOSTERM EXIT INVOKED FOR UNKNOWN LU.
+XTA1601  TARA SHUTDOWN INITIATED BY TPEND.
+XTA1701  LERAD ENTERED WITH R0=xxxxxxxx.
+XTA1705  LERAD ENTERED WITH RTNCD/FDBK2=xxxx.
+XTA1901  termname RECURSIVE ERROR - SESSION SUSPENDED.
+XTA1902  FAILURE ON SESSION WITH termname.
+XTA1902  rplident RPL RTNCD/FDBK2=xxxx.
+XTA1904  GETMAIN FOR CLEANUP SNAP FAILED.
+
+Terminal Messages
+
+XTA0145  TARA IS BEING SHUTDOWN BY OPERATOR REQUEST. PLEASE LOGOFF.
+XTA0302  LOGON COMPLETE.
+XTA0401  CALL WAS NOT PROCESSED.
+XTA0401  REMOTE HOST IS NOT ACCEPTING CALLS.
+XTA0401  UNABLE TO COMPLETE CALL - LU IS UNKNOWN.
+XTA0401  UNABLE TO CONNECT - RTNCD/FDBK2=xxxx, SSENSEI=xxxx.
+XTA0402  REQUESTED CONNECTION ESTABLISHED.
+XTA0503  USE PF1 OR PF13 TO ENTER TARA COMMANDS.
+XTA0503  FUNCTION KEY NOT DEFINED.
+XTA0601  A CONNECTION CURRENTLY EXISTS.
+XTA0601  A CALL IS ALREADY IN PROGRESS.
+XTA0602  ALL LINES TO REQUESTED HOST ARE BUSY. PLEASE TRY AGAIN LATER.
+XTA0602  CALL WHO?
+XTA0604  CALL PROCEEDING.
+XTA0604  HOST NAME TOO LONG.
+XTA0604  DON'T KNOW A HOST BY THIS NAME.
+XTA0901  NO CONNECTION CURRENTLY EXISTS.
+XTA0903  DISCONNECT IN PROGRESS.
+XTA1304  REMOTE SESSION ENDED.
+XTA1504  CONNECTION LOST. RE-CONNECT MAY BE POSSIBLE.
+XTA0000  X'xxxxxxxx' IS BASE.
+XTA2100  INVALID COMMAND ENTERED.
+XTA2100  THIS COMMAND REQUIRES AN OPERAND.
+XTA2100  THIS OPERAND IS INVALID.
+XTA2100  CONFLICTING OPTIONS SELECTED.
+XTA2100  DELIMITER IS SET TO '-'.
+XTA2100  WRAP OPTION NOW TURNED ON.
+XTA2100  WRAP OPTION NOW TURNED OFF.
+XTA2100  ALARM NOW TURNED ON.
+XTA2100  ALARM NOW TURNED OFF
+XTA2100  SCREEN ERASE NOW TURNED ON.
+XTA2100  SCREEN ERASE NOW TURNED OFF.
+XTA2100  CLOSE ACCEPTED. SHUTDOWN MODE ENTERED.
+XTA2100  UNCLOSE ACCEPTED. SHUTDOWN MODE CANCELLED.
+XTA2100  COMMON BASE SET.
+XTA2100  SESSION BASE SET.
+XTA2201  THIS COMMAND REQUIRES AN OPERAND.
+XTA2201  THIS OPERAND IS INVALID.
+XTA2202  DATA IS ALREADY BEING SAVED.
+XTA2202  A SAVE COMMAND IS ALREADY IN PROGRESS.
+XTA2202  SAVE AS WHAT?
+XTA2202  THIS NAME IS INVALID.
+XTA2203  DATA CAPTURE HAS BEGUN.
+XTA2203  CAPTURE DATASET COULD NOT BE ALLOCATED.
+XTA2204  DATA IS NOT BEING SAVED.
+XTA2205  DATA CAPTURE IS NOW INACTIVE
+XTA2206  A 'SAVE AS' COMMAND MUST BE ISSUED FIRST.
+XTA2206  DATA CAPTURE IS REACTIVATED.
+XTA2502  CAPTURE TASK FAILURE: xxxxxxxx/xxxxxxxx.
+XTA2503  CAPTURE TASK ABEND: xxxxxxxx.
+XTA2602  SCREEN CLEARED DUE TO ERROR RECOVERY.
+
+
+VTAM Exits
+---- -----
+
+Exit 
+Designation   Dispatched by this event
+-----------   ----------------------------------------------------------------	 
+  DFASY       An expedited data-flow-control request has been received on a
+	          session.
+				   
+  LERAD(*)    A logic error has been detected following an RPL-based 
+	          request.
+	
+  LOGON(*)    An application program is being requested to establish a 
+	          session as a PLU.
+				 
+  LOSTERM(*)  A session with an LU has been temporarily interrupted or 
+	          permanently lost; the LU or VTAM operator requested that the 
+			  session be terminated; or an event occurred that can affect 
+			  future operation of the session.
+				 
+  NSEXIT 	  A network services request unit has arrived for the 
+              application program, indicating, for example, that: 
+              • A session with an LU has been terminated because of a 
+			    disruption of the path used by the session
+              • A session-establishment procedure has completed or failed.
+			 
+  RELREQ 	  Another application program has requested a session with an LU
+              that is presently in session with this program.
+			 
+  RESP        A response has been received.
+  
+  SCIP        One of the following session-control requests has been received: 
+              • Clear (CLEAR)
+              • Start Data Traffic (SDT)
+              • Request Recovery (RQR)
+              • Set and Test Sequence Numbers (STSN)
+              • Bind Session (BIND)
+              • Unbind Session (UNBIND).
+			  
+  SYNAD(*) 	  An error other than a logic error has been detected for an 
+              RPL-based request.
+			  
+  TPEND(*) 	  The VTAM operator is shutting down the network or shutting down 
+              this application, or VTAM has abended.
+			  
+
+(*) designates exits which are implemented in TARA.
+
+
+
+
+3274 Reference Information
+---- --------- -----------
+
+3274 Session Processing States
+---- ------- ---------- ------
+
+The 3274 controls the processing of SNA commands, responses, and user
+data transmissions with a set of session states. Some of these states
+are defined by SNA and others are unique 3274 definitions that cause
+SNA state transitions.  When the 3274 receives the Clear or Bind
+command, all 3274 session states are reset.
+
+Data Traffic (Reset/Active) State
+
+Reset of all SNA LU-LU states in the 3274 is assured by entering
+data-traffic-reset state. This state is entered when a Bind or Clear
+command is received from the PLU. When data-traffic-reset state is
+turned off by SDT, the state is referred to as data-traffic-active
+state.
+
+When in data-traffic-active state for any LU-LU session, the 3274 SLU
+cannot transmit data or commands to the host program. The host can send
+only session-recovery and session-termination commands when in this
+state. The 3274 accepts only data RUs for an LU-LU session during
+data-traffic-active state.
+
+When in data-traffic-reset state and a data RU or a command other than
+SDT or Unbind is received from the host program, the 3274 returns a
+negative response with system sense data indicating that data traffic
+is inactive (sense code X'2005'). No other state, except contention,
+can exist when the SLU is in data-traffic-reset state.
+
+Contention (CONT) State
+
+The contention state on the LU-LU session exists only between brackets.
+In this state, the LU resources are not allocated. All associated I/O
+devices are enabled and the SLU can accept data from either the
+terminal or the host, whichever occurs first.  The first arrival
+triggers a change to send or receive state.
+
+Send (SEND) State
+
+In send state, the 3274 LU resources are allocated for inbound (to the
+primary) operations. Internally, there are two subdivisions of the send
+state. These are referred to as send--.xmit (send-not-transmit) and
+send-xmit (send transmit).  Send--.xmit exists while the control unit
+is entering data from a keyboard ... into the device buffers.  The
+state is entered from contention by the first keystroke capable of
+changing data on the display. The state is maintained until exited by
+to send-xmit by an action causing the data to be sent inbound,
+generally the ENTER key.  The transition from send--.xmit to send-xmit
+also causes the transition to in-bracket (INB) state when leaving
+contention.  The transition always causes the keyboard to be locked and
+the Input Inhibit and Wait indicators to be turned on.  When
+in-bracket, send--.xmit is entered from receive state or ERP1 state
+after successfully processing an outbound chain carrying CD but not EB.
+
+The type 2 SLU keyboard does not automatically unlock when the send
+state is entered from either receive state or ERP1 state. The keyboard
+is unlocked only if:
+
+    - A previous WCC specified keyboard restore, or
+    - The SLU is in send state and the terminal operator presses the 
+	  RESET key.
+	  
+After going from contention to send--.xmit state, any normal outbound
+requests received on that session will be discarded and a negative
+response "Receiver in Transmit Mode" with sense code X'081B' will be
+sent. Once INB, any normal outbound requests received on that session
+(FMD with BB or Bid) while in send state will be discarded and a
+negative response "Bracket Bid Reject" with sense code X'0813' will be
+sent. Neither of these responses causes any state change in the 3274
+SLU. If INB and in send state, a request received that does not carry
+BB will be rejected by the 3274 with sense code X'2004'.
+
+During send-xmit state, the data is being transferred from the device
+buffer to the PLU. Except for a possible LUSTAT, all normal flow chains
+on the LU-LU session will carry the CD. The transition out of send-xmit
+depends upon the response type carried with the inbound request. If a
+definite response is requested, the transition from send-xmit to
+receive takes place after the response to the inbound request is
+returned to the 3274. If an exception response is requested, the
+transition from send to receive takes place as soon as the end-of-chain
+has been successfully transferred to the transmission link.
+
+Receive (RCV) State
+
+The receive state is common to both contention and HDX-FF modes of
+operation. In this state, the 3274 LU resources are allocated for
+outbound (from the PLU) operations.
+
+Then RCV state is active, inbound normal flow requests cannot be sent.
+Responses, as requested, and control commands of the expedited flow ca
+be sent inbound.
+
+Input devices may be activated by a WCC that specifies Keyboard
+Restore.  However, an attempt to send data to the PLU by an operator,
+by pressing the ENTER, PA, or CURSR SEL key will not be allowed.
+
+Normal flow traffic from the PLU is passed to the device when it is in
+receive state. This is allowed to halt local device operations by
+causing the keyboard to be locked and the Input Inhibited and Wait
+indicators to be turned on.  A request with a WCC containing the
+Keyboard Restore bit set to zero is treated as a NO-OP for keyboard
+states; that is, if the keyboard was unlocked before the write, it will
+remain unlocked after a successful write.  If the keyboard was locked
+before the write, it will remain locked after the write.
+
+Receive state is entered from contention state if an outbound normal
+flow message is accepted for processing. It is entered from send-xmit
+after receiving a response from an inbound request carrying CD and
+definite response, or after successfully transferring the chain to the
+data link when the request carries CD and exception response. It is
+entered from send-xmit if a negative response is received for an
+inbound request.
+
+Receive state is changed to send--.xmit after successfully processing a
+last-of-chain carrying the CD. Receive state is changed to contention
+state after succussfully processing and responding to a chain carrying
+EB, or after receiving a chain carrying EB which carries exception
+response requested. Receive state is changed to ERP1 state if any
+negative response except X'0813', X'0814', or X'081B' is returned to
+the outbound request.
+
+ERP1 State
+
+ERP1 is a special state created to allow for error recovery protocols.
+The PLU is always responsible for error recovery; therefore, the SLU
+state structure generally is awaiting an outbound request to correct
+the error condition. However, there are times when the SLU must first
+recover and notify the PLU of its recovery by use of LUSTAT command
+before the PLU can take action. Thus, the SLU ERP1 state allows a form
+of contention mode within brackets.  This state has the characteristic
+of being able to receive any request, but only sending LUSTATs.
+
+When an LUSTAT flows inbound, the SLU remains in ERP1 state. This
+allows successive LUSTATs to flow without requiring the general
+exchange of CD between each LUSTAT. LUSTAT does not request change
+direction when sent while in ERP1 state.
+
+ERP1 state is entered by an SLU after responding with any negative
+response except X'0813', X'0814', or X'081B'. If the negative response
+does not change the state to betweenbrackets (BETB), the transition to
+ERP1 state takes place at end-of-chain.
+
+ERP1 state is changed by accepting an outbound chain carrying CD.
+Following processing of the CD bit, the transition is made to Send
+state.
+
+When in ERP1 state, the keyboard is locked, except for the SYS REQ and
+ATTN keys.
+
+Bracket States
+
+The 3274 has three major states associated with bracket protocols:
+between bracket (BETB), in bracket (INB), and pending begin bracket
+(PEND.BB). These states are used to ensure synchronization of traffic
+between the PLU and the SLU. Transitions between these states are
+controlled by the BB and EB bits and by the Bid command.
+
+Between Bracket (BETB) State
+
+BETB state exists when the PLU and SLU are in contention to begin a
+bracket. This is the state entered after the SDT command is accepted.
+When the Bid or BB is accepted from the PLU or sent by the SLU, BETB
+state ends. If the host program cancels the chain containing the Begin
+Bracket, or if the SLU sends a negative response for the chain
+containing the Bid or BB, the 3274 returns to BETB state. BETB state is
+normally assumed when an EB has been processed succussfully.
+
+When a chain carrying both BB and EB is being processed, BETB state is
+not changed.
+
+The 3274 sets BB on the first RU transmitted when the control unit
+enters INB from BETB.
+
+BETB is terminated and INB is entered when the first (or only) element
+of a chain with BB bit on is ready to be transmitted; that is, an
+ENTER, PA, PF or other attention key is pressed.
+
+Pending Begin Bracket (PEND.BB) State
+
+In the PEND.BB state, the 3274 is waiting for a bracket to be begun by
+the host system. The 3274 has either returned a positive response to a
+Bid command or has received a positive response to a Ready to Receive
+command. When the host program attempts to begin a bracket and the 3274
+is in PEND.BB state, the 3274 will not reject the bracket with sense
+code X'0813' or X'0814'.
+
+In Bracket (INB) State
+
+INB state is entered when the 3274 receives a BB without the EB or when
+the 3274 begins a bracket.  INB state is maintained by the 3274 until
+the positive definite response to the EB chain is returned to the host
+or until the 3274 receives the last element of the EB chain when
+exception response is requested.
+
+3274 Bracket State Errors
+
+Error codes generated for bracket error conditions are as follows. The
+bracket state condition remains unchanged after sending the error code.
+
+ +---------------------------------------------------+
+ |                          COMMAND                  |
+ +-------+-----+-----+-----+------+------+-----+-----+
+ |       |Chase|Chase|     |Cancel|Cancel|FMD  |FMD  |
+ |STATE  | &EB | &¬EB| Bid | &EB  |&¬EB  |&BB  |&¬BB |
+ +-------+-----+-----+-----+------+------+-----+-----+
+ |BETB   | 2003   --    --   2003    --    --   2003 |
+ |INB    |  --    --   0813   --     --   0813   --  |
+ |PEND.BB| 2003   --    --   2003    --    --   2003 |
+ +-------+-------------------------------------------+
+
+SNA Sense Codes Returned by 3274
+
+Path Errors
+---- ------
+
+X'8004' -- Unrecognized DAF
+ Controller does not have a terminal adapter for the DAF (destination
+ address field) address.
+
+X'8005' -- No Session
+ - A Bind has not been received or accepted.
+ - A request other than Bind is sent to an SLU which has already
+   accepted a Bind, and the OAF (origin address field) is not X'00' or
+   the OAF in the accepted Bind.
+
+X'8008' -- PU Not Active
+ The 3274 has not received or accepted an ACTPU, or a control condition
+ caused an internally generated DACTPU.
+
+X'8009' -- LU Not Active
+ The 3274 has not received or accepted an ACTLU, or a control condition
+ caused an internally generated DACTLU.
+
+X'800F' -- Invalid Address Combination
+ A request was addressed to the PU (DAF=X'00'), and the OAF was not
+ SSCP (OAF=X'00').
+
+RH Usage Errors
+-- ----- ------
+
+X'4006' -- Exception Response Not Allowed
+ LIC carried exception response when Bind specified definite response.
+
+X'4007' -- Definite Response Not Allowed
+ LIC carried definite response when Bind specified exception response
+ or LIC carried definite response.
+
+X'400A' -- No-response Not Allowed
+ A chain element did not have DR1, DR2, or the exception bit set to 1.
+
+X'400F' -- Format Indicator Not Allowed
+ An FM request received by the 3274 indicated formatted header
+ included.
+
+State Errors
+----- ------
+
+X'2001' -- Sequence Number Error
+ The sequence number of the normal flow request did not match the
+ number expected.
+
+X'2002' -- Chaining Error
+ Chain elements were out of protocol sequence.
+
+X'2003' -- Bracket State Error
+ A bracket state error occurred.
+
+X'2004' -- Direction error
+ A normal flow without begin bracket was received while the 3274 was in
+ in send state.
+
+X'2005' -- Data Traffic Reset
+ An FM or DFC request was received before an SDT was received or
+ accepted.
+
+Request Errors
+------- ------
+
+X'1002' -- RU Length Error
+ Message length > 1536 bytes (3274-1A only). RU size exceeds Bind
+ specification (LU type 1 only).
+
+X'1003' -- Function Not Supported
+ - Unsupported session control request.
+ - Unsupported data flow control request.
+ - Signal-code is not B'00010000'
+ - Network control request.
+ - FM data stream.
+ - Invalid command.
+   - Data following a Read, RM, RMA, or EAU command.
+   - For LU type 3, any Read, RM, or RMA command.
+ - Unsupported FM data, SSCP-->SPU.
+
+X'1005' -- Parameter Error
+ Invalid address following SBA, RA, or EUA order (SBA, RA, or EUA order
+ without parameters), or SCS parameter error.
+
+X'1007' -- Category Not Supported
+ - An FMD request from the SSCP was directed to a printer.
+ - An unsupported network service message received.
+ - An unsupported FM data command received.
+
+Request Reject
+------- ------
+
+X'0802' -- Intervention Required
+ For LU type 2, security keylock is turned off.
+
+X'0805 -- Session Limit Exceeded
+ A Bind was received whose OAF differs from the PLU already bound.
+
+X'0807' -- Subsidiary Device Temporarily Not Available
+ For LU type 2, a printer to be copied to is in-bracket, or on an LU
+ type 1 or 3 session, or an operator has depressed the DEV CNCL key.
+
+X'080A' -- Permission Rejected
+ Display power is off. The SSCP will not be notified when the device
+ powers on.
+
+X'080C' -- Procedure Not Supported
+ An unsupported REQMS type request was received.
+
+X'0813' -- Bracket Bid Reject--(No RTR)
+ - Returned by LU types 1 and 2 to a BID or BID with Begin Bracket
+   if the display has won contention and started a bracket.
+ - Returned by all LU types when a BID or Begin Bracket was received
+   and INB state already exists. This may be a protocol error.
+      X'0815' -- Function Active
+ - Bind reject if the same OAF already has an accepted Bind to the SLU.
+ - REQMS request is in process.
+      X'081B' -- Receiver in Transmit Mode
+ - The SLU is between bracket, but a data key has been depressed.
+ - An FM message was received from the SSCP while the display was owned
+   by the PLU-SLU session or is in test mode.
+ - An SSCP FM message is rejected if local copy is taking place while
+   the SSCP-SLU session owns the display.
+
+X'081C' -- Request Not Executable
+ The 3274 has a nonrecoverable error.
+
+X'0821' -- Invalid Session Parameters
+ Bind parameters do not match the 3274 Bind checks.
+
+X'0829' -- Change Direction Required
+ A 3270 read-type command was received without a Change Direction or
+ with an End Bracket.
+
+X'082A' -- Presentation Space Altered, Request Executed
+ An LU type 2 3277 attached to a 3274 has a reset keyboard, and tried
+ to enter while in receive state; request executed.
+
+X'082B' -- Presentation Space Integrity Lost
+ - A temporary error has occurred; for example, parity check in device.
+ - An operator has cleared the display by switching to SSCP-SLU session
+   or test mode and returned to PLU-SLU session.
+
+X'082D' -- SLU Busy
+ - LU type 2 display is owned by SSCP-SLU session or test mode.
+ - LU type 2 dispay is busy doing an operator-initiated local copy.
+ - LU type 2 3277 attached to a 3274 is busy with a Back Tab.
+
+X'082E' -- Intervention Required at Subsidiary Device
+ For LU type 2, a printer being copied to from a host-initiated print
+ has intervention-required type error. Refer X'0802'. Printer power off
+ or not attached to the controller is included in this category.
+
+X'082F' -- Request Not Executable Because of LU Subsidiary Device
+ For LU type 2, a printer being copied to has a nonrecoverable error.
+
+X'0831' -- LU Component Disconnected
+ This response is returned if the device attached to the 3274 cannot be
+ contacted by a device poll. This is due to device power off, cable
+ detached from the controller port, or connecting cable broken.
+
+X'0843' -- Required Function Manager Synchronization Not Supplied
+ For LU type 2 or 3 chains having the print bit on, must be definite
+ response or exception response chain must carry CD.
+
+X'0845' -- Permission Rejected
+ Display or printer power is off. The SSCP will be notified when the
+ device powers on.
+
+X'084A' -- Presentation Space Altered, Request Not Executed
+ An LU type 2 3277 attached to a 3274 has a reset keyboard, and tried
+ to enter while in receive state; request not executed.
+
+X'084C' -- Resource Not Configured
+
+X'0863' -- Symbol Set Not Loaded
+
+X'0871' -- Read State Error
+
+
++-------+------+-----------+---------------------------------+
+|       |      | ALLOWABLE |                                 |
+| BYTES | BITS |  VALUES   |            MEANING              |
++-------+------+-----------+---------------------------------+
+|   0   | 0-7  |  X'31'    | BIND request code               |
+|       |      |           |                                 |
+|   1   | 0-3  |  B'0000'  | Format 0                        |
+|       | 4-7  |  B'0001'  | Non-negotiable BIND             |
+|       |      |           |                                 |
+|   2   | 0-7  |  X'03'    | FM Profile                      |
+|       |      |           |                                 |
+|   3   | 0-7  |  X'03'    | TS Profile                      |
+|       |      |           |                                 |
+|   4   | 0    |  --       | Not checked                     |
+|       | 1    |  B'0'     | Immediate request mode          |
+|       | 2-3  |  B'01'    | Exception response              |
+|       |      |  B'10'    | Definite response               |
+|       |      |  B'11'    | Exception and definite response |
+|       | 4-5  |  --       | Not checked                     |
+|       | 6    |  B'0'     | Compression not used            |
+|       | 7    |  B'1'     | Primary can send EB             |
+|       |      |           |                                 |
+|   5   | 0    |  B'1'     | Multiple request chains         |
+|       | 1    |  --       | Not checked                     |
+|       | 2-3  |  B'01'    | Exception response              |
+|       |      |  B'10'    | Definite response               |
+|       |      |  B'11'    | Exception and definite response |
+|       | 4-7  |  --       | Not checked                     |
+|       |      |           |                                 |
+|   6   | 0    |  --       | Not checked                     |
+|       | 1    |  B'0'     | FM header not used              |
+|       | 2    |  B'1'     | Brackets are used               |
+|       | 3    |  B'1'     | Bracket termination rule 1      |
+|       | 4    |  B'0'     | EBCDIC                          |
+|       | 5-7  |  --       | Not checked                     |
+|       |      |           |                                 |
+|   7   | 0-1  |  B'10'    | HDX flip-flop protocol used     |
+|       | 2    |  B'0'     | PLU has recovery responsibility |
+|       | 3    |  B'0'     | First speaker is secondary      |
+|       | 4-7  |  --       | Not checked                     |
+|       |      |           |                                 |
++-------+------+-----------+---------------------------------+
+Figure A-2. 3270 BIND Parameter Checking
+
+
+NPSI Reference Information
+---- --------- -----------
+
+LU Simulator Action for Session Control RUs
+
+The LU simulator accepts the following session control RUs when they
+are issued by the host SSCP or LU:
+
+  - Activate Logical Unit (ACTLU)
+  - Bind Session (BIND)
+  - Start Data Traffic (SDT)
+  - Clear (CLEAR)
+  - Unbind Session (UNBIND)
+  - Deactivate Logical Unit (DACTLU)
+
+LU Services returns the appropriate response for each request.
+
+Upon receipt of the ACTLU command, the LU simulator returns a positive
+response to the SSCP, indicating that the SSCP-LU session between the
+host SSCP and the LU associated with the virtual circuit is active. The
+LU simulator does not check the type of activation (ERP or COLD).
+
+When a BIND command is recieved from a host LU, the LU simulator checks
+the bind parameters against the value listed in Figure B-1. If valid,
+the LU simulator sends a positive response to the host LU, indicating
+that the LU-LU session is active. Otherwise, the LU simulator rejects
+the BIND.
+
+Upon receipt of a SDT command, the LU simulator is eligible to receive
+data, and returns a positive response to the host LU.
+
+Upon receipt of a CLEAR command, The LU simulator clears all local
+pending conditions and returns a positive response to the host.
+
+Upon receipt of an UNBIND command, the LU simulator returns a positive
+response to the host LU, indicating that the LU-LU session is
+deactivated.
+
+Upon receipt of a DACTLU command from the SSCP, the LU simulator
+returns a positive response to the SSCP, indicating that the SSCP-LU
+session is deactivated.
+
++-------+------+-----------+---------------------------------+
+|       |      | ALLOWABLE |                                 |
+| BYTES | BITS |  VALUES   |            MEANING              |
++-------+------+-----------+---------------------------------+
+|   0   | 0-7  |  X'31'    | BIND request code               |
+|       |      |           |                                 |
+|   1   | 0-3  |  B'0000'  | Format 0                        |
+|       | 4-7  |  B'0001'  | Non-negotiable BIND             |
+|       |      |           |                                 |
+|   2   | 0-7  |  X'03'    | FM Profile                      |
+|       |      |           |                                 |
+|   3   | 0-7  |  X'03'    | TS Profile                      |
+|       |      |           |                                 |
+|   4   | 0    |  B'1'     | Multiple request chains         |
+|       | 1    |  B'0'     | Immediate request mode          |
+|       | 2-3  |  B'01'    | Exception response              |
+|       |      |  B'10'    | Definite response               |
+|       |      |  B'11'    | Exception and definite response |
+|       | 4-5  |  B'00'    | Reserved                        |
+|       | 6    |  B'0'     | Compression not used            |
+|       | 7    |  B'0'     | Primary may not send EB         |
+|       |      |  B'1'     | Primary may send EB             |
+|       |      |           |                                 |
+|   5   | 0    |  B'1'     | Multiple request chains         |
+|       | 1    |  B'0'     | Immediate request mode          |
+|       | 2-3  |  B'01'    | Exception response              |
+|       |      |  B'10'    | Definite response               |
+|       |      |  B'11'    | Exception and definite response |
+|       | 4-5  |  B'00'    | Reserved                        |
+|       | 6    |  B'0'     | Compression not used            |
+|       | 7    |  B'0'     | Primary may not send EB         |
+|       |      |  B'1'     | Primary may send EB             |
+|       |      |           |                                 |
+|   6   | 0    |  B'0'     | Reserved                        |
+|       | 1    |  B'0'     | FM header not used              |
+|       | 2    |  B'0'     | Brackets are not used           |
+|       | 2    |  B'1'     | Brackets are used               |
+|       | 3    |  B'1'     | Bracket termination rule 1      |
+|       | 4    |  B'0'     | EBCDIC                          |
+|       | 5-7  |  B'000'   | Reserved                        |
+|       |      |           |                                 |
+|   7   | 0-1  |  B'01'    | HDX contention mode             |
+|       |      |  B'10'    | HDX flip-flop mode              |
+|       | 2    |  B'0'     | PLU has recovery responsibility |
+|       | 3    |  B'0'     | First speaker is secondary      |
+|       | 4-7  |  B'0000'  | Reserved                        |
+|       |      |           |                                 |
++-------+------+-----------+---------------------------------+
+Figure B-1. NPSI BIND Parameter Checking
+
+
+Appendix: X.25 NPSI Process Sequences
+________  ____ ____ _______ _________
+
+
++-----------------------+    +----------------------------+   +-------+
+|         Host          |    |            3705            |   |X.25   |
++-----------------------+    +----------------------------+   |Network|
+|   End User   | SNA AM |    |    ACF/NCP and X.25 NPSI   |   |(PSDN) |
++-----------------------+    +----------------------------+   +-------+
+|Appl|CTCP|Oper|ACF/VTAM|    |      |    VC    |   MCH    |   |       |
++-----------------------+    |NCP_PU|---------------------+   |       |
+|    |    |    |        |    |      |LU|PU|LINK|LU|PU|LINK|   |       |
+|    |    |    |        |    +----------------------------+   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |V NET,ACT,ID=MCH_LINK    |  |  |    |  |  |    |   |       |
+|    |    |    |     ACTLINK (MCH_LINK)|  |    |  |  |   DTR_ON       |
+|    |    |    |    ------------>>--------------------> ------->      |
+|    |    |    |        |    |      |  |  |    |  |  |   (DTE Ready)  |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |     +R(ACTLINK)    |  |  |    |  |  |    DSR_ON      |
+|    |    |    |    <-----------<<--------------------- <-------      |
+|    |    |    |        |    |      |  |  |    |  |  |   (DCE Ready)  |
+|    |    |V NET,ACT,ID=MCH_PU      |  |  |    |  |  |    |   |       |
+|    |    |    |     CONTACT (MCH_PU)  |  |    |  |  |   SABM |       |
+|    |    |    |    ------------>>----------------> ------------->    |
+|    |    |    |     +R(CONTACT)    |  |  |    |  |  |    |   |       |
+|    |    |    |    <------------   |  |  |    |  |  |    UA  |       |
+|    |    |    |     CONTACTED (MCH_PU)|  |    |  | <-------------    |
+|    |    |    |    <-----------<<------------------ RESTART REQUEST  |
+|    |    |    |        |    |      |  |  |    |  | --------------->  |
+|    |    |    |        |    |      |  |  |    |  |  DCE RESTART      |
+|    |    |    |        |    |      |  |  |    |  |  CONFIRMATION     |
+|    |    |    |        |    |      |  |  |    |  | <---------------  |
+|    |    |    |     ACTPU   |      |  |  |    |  |  |    |   |       |
+|    |    |    |    ------------------------------>  |    |   |       |
+|    |    |    |     +R(ACTPU)      |  |  |    |  |  |    |   |       |
+|    |    |    |    <------------------------------  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
++-----------------------+    +----------------------------+   +-------+
+Figure C-1. MCH Activation Sequence Without GATE or DATE.
+	  
+	  
++-----------------------+    +----------------------------+   +-------+
+|         Host          |    |            3705            |   |X.25   |
++-----------------------+    +----------------------------+   |Network|
+|   End User   | SNA AM |    |    ACF/NCP and X.25 NPSI   |   |(PSDN) |
++-----------------------+    +----------------------------+   +-------+
+|Appl|CTCP|Oper|ACF/VTAM|    |      |    VC    |   MCH    |   |       |
++-----------------------+    |NCP_PU|---------------------+   |       |
+|    |    |    |        |    |      |LU|PU|LINK|LU|PU|LINK|   |       |
+|    |    |    |        |    +----------------------------+   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |V NET,INACT,ID=MCH_PU    |  |  |    |  |  |    |   |       |
+|    |    |    |    DACTPU   |      |  |  |    |  |  |    |   |       |
+|    |    |    |   ------------------------------->  |    |   |       |
+|    |    |    |    +R(DACTPU)      |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------------------------  |    |   |       |
+|    |    |    |    DISCONTACT (MCH_PU)|  |    |  |  |   DISC |       |
+|    |    |    |   ------------->>----------------> ------------->    |
+|    |    |    |    +R(DISCONTACT)  |  |  |    |  |  |   UA   |       |
+|    |    |    |   <------------<<----------------- <-------------    |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    INOP_STATIONs for all active VCs and PVCs |       |
+|    |    |    |   <--------------------  |    |  |  |    |   |       |
+|    |    |V NET,INACT,ID=MCH_LINK  |  |  |    |  |  |    |   |       |
+|    |    |    |    DACTLINK (MCH_LINK)|  |    |  |  |  DTR_OFF       |
+|    |    |    |   ------------->>-------------------> -------->      |
+|    |    |    |        |    |      |  |  |    |  |  | (DTE not-Ready)|
+|    |    |    |    +R(DACTLINK)    |  |  |    |  |  | DSR_OFF        |
+|    |    |    |   <------------<<-------------------- <--------      |
+|    |    |    |        |    |      |  |  |    |  |  | (DCE not-Ready)|
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
++-----------------------+    +----------------------------+   +-------+
+Figure C-2. MCH Deactivation Sequence
+	  
+	  
++-----------------------+    +----------------------------+   +-------+
+|         Host          |    |            3705            |   |X.25   |
++-----------------------+    +----------------------------+   |Network|
+|   End User   | SNA AM |    |    ACF/NCP and X.25 NPSI   |   |(PSDN) |
++-----------------------+    +----------------------------+   +-------+
+|Appl|CTCP|Oper|ACF/VTAM|    |      |    VC    |   MCH    |   |       |
++-----------------------+    |NCP_PU|---------------------+   |       |
+|    |    |    |        |    |      |LU|PU|LINK|LU|PU|LINK|   |       |
+|    |    |    |        |    +----------------------------+   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |V NET,ACT,ID=switched major node    |  |  |    |   |       |
+|    |    |V NET,ACT,ID=VC_LINK     |  |  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    ACTLINK (VC_LINK)  |  |    |  |  |    |   |       |
+|    |    |    |   ----------------------->    |  |  |    |   |       |
+|    |    |    |    +R(ACTLINK)     |  |  |    |  |  |    |   |       |
+|    |    |    |   <-----------------------    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |V NET,ACT,ID=VC_PU|      |  |  |    |  |  |    |   |       |
+|    |    |V NET,ACT,ID=VC_LU|      |  |  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|OPNDST ACQUIRE,VC_LU   |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|   INIT-OTHER (VC_LU)  |    |      |  |  |    |  |  |    |   |       |
+|  --------------->     |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    CONNOUT (VC_LINK)  |  CALL REQUEST    |   |       |
+|    |    |    |   -------------------------------------->|   |       |
+|    |    |    |    +R(CONNOUT)     |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------   |  |  CALL CONNECTED  |   |       |
+|    |    |    |    REQCONT (VC_PU) |  | <--------------------------  |
+|    |    |    |   <--------------------- |    |  |  |    |   |       |
+|    |    |    |    SETCV (VC_PU)   |  |  |    |  |  |    |   |       |
+|    |    |    |   ------------->   |  |  |    |  |  |    |   |       |
+|    |    |    |    +R(SETCV)|      |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------   |  |  |    |  |  |    |   |       |
+|    |    |    |    CONTACT  |      |  |  |    |  |  |    |   |       |
+|    |    |    |   ------------->>----->  |    |  |  |    |   |       |
+|    |    |    |    +R(CONTACT)     |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------   |  |  |    |  |  |    |   |       |
+|    |    |    |    CONTACTED (VC_PU)  |  |    |  |  |    |   |       |
+|    |    |    |   <------------<<------  |    |  |  |    |   |       |
+|    |    |    |    ACTPU    |      |  |  |    |  |  |    |   |       |
+|    |    |    |   -------------------->  |    |  |  |    |   |       |
+|    |    |    |    +R(ACTPU)|      |  |  |    |  |  |    |   |       |
+|    |    |    |   <--------------------  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
++-----------------------+    +----------------------------+   +-------+
+Figure C-3. (Part 1) Call Establishment Sequence for Type 5 VC
+
+
++-----------------------+    +----------------------------+   +-------+
+|         Host          |    |            3705            |   |X.25   |
++-----------------------+    +----------------------------+   |Network|
+|   End User   | SNA AM |    |    ACF/NCP and X.25 NPSI   |   |(PSDN) |
++-----------------------+    +----------------------------+   +-------+
+|Appl|CTCP|Oper|ACF/VTAM|    |      |    VC    |   MCH    |   |       |
++-----------------------+    |NCP_PU|---------------------+   |       |
+|    |    |    |        |    |      |LU|PU|LINK|LU|PU|LINK|   |       |
+|    |    |    |        |    +----------------------------+   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    RNAA (VC_LU)    |  |  |    |  |  |    |   |       |
+|    |    |    |   ------------->   |  |  |    |  |  |    |   |       |
+|    |    |    |    +R(RNAA) |      |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------   |  |  |    |  |  |    |   |       |
+|    |    |    |    SETCV (VC_LU)   |  |  |    |  |  |    |   |       |
+|    |    |    |   ------------->   |  |  |    |  |  |    |   |       |
+|    |    |    |    +R(SETCV)|      |  |  |    |  |  |    |   |       |
+|    |    |    |   <-------------   |  |  |    |  |  |    |   |       |
+|    |    |    |    ACTLU    |      |  |  |    |  |  |    |   |       |
+|    |    |    |   ----------------->  |  |    |  |  |    |   |       |
+|    |    |    |    +R(ACTLU)|      |  |  |    |  |  |    |   |       |
+|    |    |    |   <-----------------  |  |    |  |  |    |   |       |
+|   +R(INIT-OTHER)      |    |      |  |  |    |  |  |    |   |       |
+|  <---------------     |    |      |  |  |    |  |  |    |   |       |
+|   CINIT      |        |    |      |  |  |    |  |  |    |   |       |
+|  <---------------     |    |      |  |  |    |  |  |    |   |       |
+|   +R(CINIT)  |        |    |      |  |  |    |  |  |    |   |       |
+|  --------------->     |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    BIND|    |      |  |  |    |  |  |    |   |       |
+|  --------------------------------->  |  |    |  |  |    |   |       |
+|    |    |    |    +R(BIND) |      |  |  |    |  |  |    |   |       |
+|  <---------------------------------  .............................  |
+|    |    |    |    SDT |    |      |  |  |    |  |  |    |   |       |
+|  --------------------------------->  |  |    |  |  |    |   |       |
+|   SESSST|    |        |    |      |  |  |    |  |  |    |   |       |
+|  --------------->     |    |      |  |  |    |  |  |    |   |       |
+|    |    |    |    +R(SDT)  |      |  |  |    |  |  |    |   |       |
+|  <---------------------------------  |  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
+|/* OPNDST has completed. */ |      |  |  |    |  |  |    |   |       |
+|    |    |    |        |    |      |  |  |    |  |  |    |   |       |
++-----------------------+    +----------------------------+   +-------+
+Figure C-3. (Part 2) Call Establishment Sequence for Type 5 VC
+
+
+*** IBM-copyrighted information removed from here.
+*** See ACF/VTAM Data Areas for ACB, NIB and RPL mapping.
+
+
+NAME:  COMMON STORAGE AREA (XTACMAP)
+---- 
+
+FUNCTION:  THE COMMON STORAGE AREA, UNIQUE TO TARA, CONTAINS
+--------   CONTROL BLOCKS AND OTHER DATA WHICH IS NOT ASSOCIATED
+           WITH ANY SESSION.
+		   
+BOUNDARY:  DOUBLEWORD
+
+--------
+LENGTH:  916 BYTES (X'394')                  <---SUBJECT TO CHANGE
+------
+
+OFFSETS    TYPE     LENGTH  NAME      DESCRIPTION
+-------    ----     ------  ----      -----------
+  0    (0) STRUCTURE   916  XTACMAP   LEVEL ONE DECLARE
+-----------------------------------------------------------------------
+  0    (0) STRUCTURE   112  CS#ACB    VTAM ACB
+-----------------------------------------------------------------------
+112   (70) BINARY        1  CS#APLID  LENGTH OF APPLID
+113   (71) CHARACTER     8            APPLID
+121   (79)               3            UNUSED (ALIGNMENT)
+-----------------------------------------------------------------------
+124   (7C) STRUCTURE    65  CS#EXLST  VTAM EXIT LIST
+189   (BD)               3            UNUSED (ALIGNMENT)
+-----------------------------------------------------------------------
+192   (C0) STRUCTURE   112  CS#STLGN  VTAM RPL USED BY MAINLINE FOR
+                                      SETLOGON PROCESSING
+-----------------------------------------------------------------------
+304  (130) A-ADDRESS     4  CS#AMAIN  ADDRESS OF MAINLINE MODULE
+308  (134) A-ADDRESS     4  CS#ALOGX  ADDRESS OF LOGON EXIT
+312  (138) A-ADDRESS     4  CS#AOPRX  ADDRESS OF OPNDST PRI RPL EXIT
+316  (13C) A-ADDRESS     4  CS#AOSRX  ADDRESS OF OPNDST SEC RPL EXIT
+320  (140) A-ADDRESS     4  CS#APRRX  ADDRESS OF PRI RECEIVE RPL EXIT
+324  (144) A-ADDRESS     4  CS#AACQR  ADDRESS OF ACQUIRE ROUTINE
+328  (148) A-ADDRESS     4  CS#ALOGF  ADDRESS OF LOGOFF ROUTINE
+332  (14C) A-ADDRESS     4  CS#ASRRX  ADDRESS OF SEC RECEIVE RPL EXIT
+336  (150) A-ADDRESS     4  CS#ADROP  ADDRESS OF DROP ROUTINE
+340  (154) A-ADDRESS     4  CS#APSMR  ADDRESS OF PRI SCREEN MANAGER
+344  (158) A-ADDRESS     4  CS#ASNRX  ADDRESS OF SEND RPL EXIT
+348  (15C) A-ADDRESS     4  CS#AEKOX  ADDRESS OF SEND ON ECHO RPL EXIT
+352  (160) A-ADDRESS     4  CS#ACLDX  ADDRESS OF CLSDST EXIT
+356  (164) A-ADDRESS     4  CS#ALOGR  ADDRESS OF LOGGER
+360  (168) A-ADDRESS     4  CS#ALSTX  ADDRESS OF LOSTERM EXIT
+364  (16C) A-ADDRESS     4  CS#ATPNX  ADDRESS OF TPEND EXIT
+368  (170) A-ADDRESS     4  CS#ALRDX  ADDRESS OF LERAD EXIT
+372  (174) A-ADDRESS     4  CS#ASYDX  ADDRESS OF SYNAD EXIT
+376  (178) A-ADDRESS     4  CS#ACLNP  ADDRESS OF CLEANUP ROUTINE
+380  (17C) A-ADDRESS     4  CS#ARCVY  ADDRESS OF RECOVERY ROUTINE
+384  (180) A-ADDRESS     4  CS#ASCMD  ADDRESS OF SYSTEM COMMAND PROC'R
+388  (184) A-ADDRESS     4  CS#ASAVE  ADDRESS OF CAPTURE COMMAND PROC'R
+392  (188) A-ADDRESS     4  CS#ACPTR  ADDRESS OF CAPTURE ROUTINE
+396  (18C) A-ADDRESS     4  CS#ACPTT  ADDRESS OF CAPTURE I/O TASK
+400  (190) A-ADDRESS     4  CS#ACPTX  ADDRESS OF CAPTURE TASK ETXR
+404  (194) A-ADDRESS     4  CS#ASCRX  ADDRESS OF SESSIONC RPL EXIT
+408  (198) A-ADDRESS     4  CS#ADFAX  ADDRESS OF DATA-FLOW ASY EXIT
+-----------------------------------------------------------------------
+412  (19C) FULLWORD      4  CS#ECBTP  TPEND ECB
+416  (1A0) FULLWORD      4  CS#ECBID  IDLE CONDITION ECB
+-----------------------------------------------------------------------
+420  (1A4) STRUCTURE    12  CS#ECBL   ECB LIST
+420  (1A4) A-ADDRESS     4  CS#ECBL1  ADDRESS OF TPEND ECB
+424  (1A8) A-ADDRESS     4  CS#ECBL2  ADDRESS OF IDLE CONDITION ECB
+428  (1AC) A-ADDRESS     4  CS#ECBL3  ADDRESS OF COMM TASK ECB
+-----------------------------------------------------------------------
+432  (1B0) STRUCTURE    96  CS#LOG    LOG DATASET DCB (QSAM)
+-----------------------------------------------------------------------
+528  (210) STRUCTURE    88  CS#SNAP   SNAP DATASET DCB (BSAM)
+-----------------------------------------------------------------------
+616  (268) STRUCTURE   276            PHASE TRACE AREA
+616  (268) BINARY        1  CS#PLOCK  LOCK ON PHASE TRACE AREA
+617  (269)               3            UNUSED (ALIGNMENT)
+620  (26C) CHARACTER    16            EYECATCHER C'PHASE TRACE AREA'
+636  (27C) HALFWORD      2            EYECATCHER X'FFFF' INDICATING
+                                      ADJACENT ENTRY IS FIRST (OLDEST)
+638  (27E) STRUCTURE   254  CS#THEN   127 2-BYTE TRACE ENTRIES
+892  (37C) HALFWORD      2  CS#NOW    MOST-RECENTLY ENTERED PHASE
+                                      (INITIALIZED TO X'DEAD')
+894  (37E) HALFWORD      2            EYECATCHER X'CCCC' INDICATING
+                                      ADJACENT ENTRY IS CURRENT
+-----------------------------------------------------------------------
+896  (380) BITSTRING     1  CS#FLAG1  COMMON FLAGS
+           1... ....        STOPPED   STOP OPERATOR COMMAND OR !!CLOSE.
+                                      SYSTEM COMMAND WAS ISSUED
+           .1.. ....        LERENTRY  LERAD EXIT WAS ENTERED
+           ..1. ....        TPEND     TPEND WAS DETECTED
+           ...1 1111                  NOT USED
+897  (381) BITSTRING     1  CS#FLAG2  COMMON FLAGS
+           1111 1111                  NOT USED
+898  (382)               2            UNUSED (ALIGNMENT)
+-----------------------------------------------------------------------
+900  (384) SIGNED        4  CS#SSNCT  NUMBER OF ACTIVE SESSIONS
+-----------------------------------------------------------------------
+904  (388) A-ADDRESS     8  CS#SSQAB  SESSION-STORAGE QUEUE ANCHOR
+                                      BLOCK
+904  (388) A-ADDRESS     4  CS#SSFST  POINTER TO FIRST SESSION STORAGE
+                                      AREA IN QUEUE
+908  (38C) A-ADDRESS     4  CS#SSLST  POINTER TO LAST SESSION STORAGE
+                                      AREA IN QUEUE
+-----------------------------------------------------------------------
+912  (390) A-ADDRESS     4  CS#AHALT  ADDRESS OF HOST-ALIAS-TABLE
+
+*** WARNING!  This area has recently been remapped - offsets which
+*** have changed have not yet been reflected in this documentation!
+
+
+
+NAME:  SESSION STORAGE AREA (XTASMAP)
+----
+
+FUNCTION:  THE SESSION STORAGE AREA, UNIQUE TO TARA, CONTAINS
+--------   CONTROL BLOCKS, QUEUES, BUFFERS AND FLAGS WHICH ARE
+           RELATED TO INDIVIDUAL SESSIONS.
+		   
+BOUNDARY:  DOUBLEWORD
+--------
+
+LENGTH:  VARIABLE
+------
+
+OFFSETS    TYPE     LENGTH  NAME      DESCRIPTION
+-------    ----     ------  ----      -----------
+   0   (0) STRUCTURE  4032  XTASMAP   LEVEL ONE DECLARE
+-----------------------------------------------------------------------
+   0   (0) A-ADDRESS     4  SS#NEXT   POINTER TO NEXT SESSION STORAGE
+                                      AREA
+-----------------------------------------------------------------------
+   4   (4) A-ADDRESS     4  SS#PREV   POINTER TO PREVIOUS SESSION
+                                      STORAGE AREA
+-----------------------------------------------------------------------
+   8   (8) FULLWORD      4  SS#LNGTH  LENGTH OF SESSION STORAGE AREA
+-----------------------------------------------------------------------
+  12   (C) CHARACTER     8  SS#PNODE  NODE NAME OF PRIMARY SLU
+  20  (14) BINARY        4  SS#PCID   CID OF PRIMARY SESSION
+  20  (14) BINARY        2  SS#PCIDP  NETWORK ADDRESS OF PRIMARY PLU
+  22  (16) BINARY        2  SS#PCIDS  NETWORK ADDRESS OF PRIMARY SLU
+  24  (18) A-ADDRESS     4  SS#APRPL  ADDRESS OF PRIMARY RPL
+  28  (1C) A-ADDRESS     4  SS#AERPL  ADDRESS OF ECHO RPL
+  32  (20) BINARY        4  SS#PRSPL  LENGTH OF DATA RECEIVED FROM
+                                      PRIMARY SLU
+  36  (24) CHARACTER   256  SS#PIBUF  INPUT BUFFER FOR PRIMARY SLU
+-----------------------------------------------------------------------
+ 292 (124) CHARACTER     8  SS#SNODE  NODE NAME OF SECONDARY SLU
+ 300 (12C) BINARY        4  SS#SCID   CID OF SECONDARY SESSION
+ 300 (12C) BINARY        2  SS#SCIDP  NETWORK ADDRESS OF SECONDARY PLU
+ 302 (12E) BINARY        2  SS#SCIDS  NETWORK ADDRESS OF SECONDARY SLU
+ 304 (130) A-ADDRESS     4  SS#ASRPL  ADDRESS OF SECONDARY RPL
+ 308 (134) A-ADDRESS     4  SS#ACRPL  ADDRESS OF CLSDST RPL
+ 312 (138) BINARY        4  SS#SRSPL  LENGTH OF DATA RECEIVED FROM
+                                      SECONDARY SLU
+ 316 (13C) CHARACTER   256  SS#SIBUF  INPUT BUFFER FOR SECONDARY SLU
+-----------------------------------------------------------------------
+ 572 (23C) A-ADDRESS     4  SS#ANIB   ADDRESS OF NIB
+-----------------------------------------------------------------------
+ 576 (240) BINARY       36  SS#BIND   SESSION PARAMETERS
+-----------------------------------------------------------------------
+ 612 (264) BINARY        8  SS#DVCHR  DEVICE CHARACTERISTICS
+-----------------------------------------------------------------------
+ 620 (26C) SIGNED       12  SS#STATS  SESSION-RELATED STATISTICS
+ 620 (26C) FULLWORD      4  SS#SSNCT  COUNT OF SESSIONS STARTED
+ 624 (270) FULLWORD      4  SS#SNDCT  COUNT OF MESSAGES SENT
+ 628 (274) FULLWORD      4  SS#RCVCT  COUNT OF MESSAGES RECEIVED
+-----------------------------------------------------------------------
+ 632 (278) BITSTRING     2  SS#FLAGS  SESSION-RELATED FLAGS
+ 632 (278) BITSTRING     1  SS#FLAG1  SESSION-FLAGS 1 (PRIMARY)
+           1... ....        SS#PACT   PRIMARY HALF-SESSION IS ACTIVE
+           .1.. ....        SS#SACT   SECONDARY HALF-SESSION IS ACTIVE
+           ..1. ....        SS#LOGFF  SUPPRESS RCV AFTER LOGOFF COMMAND
+           ...1 ....        SS#PCONN  A CONNECTION IS PENDING
+           .... 1...        SS#ABORT  LOGON WAS REFUSED
+           .... .1..        SS#CLNUP  CLEANUP WAS INVOKED FOR THIS
+                                      SESSION
+           .... ..1.        SS#SUSPD  THIS SESSION HAS BEEN SUSPENDED
+           .... ...1        SS#ALLDN  ALL DONE: READY FOR NORMAL
+                                      CLEANUP
+ 633 (279) BITSTRING        SS#FLAG2  SESSION-FLAGS 2 (PSM)
+           1... ....        SS#HOLDD  SCREEN FREEZE IN EFFECT
+           .1.. ....        SS#INBKT  PRIMARY SESSION IS IN IN-BRACKET
+                                      STATE
+           ..1. ....        SS#REENT  PSM MUST BE RE-ENTERED TO FINISH
+                                      PROCESSING REQUEST
+           ...1 ....        SS#AWRAP  AUTOWRAP OPTION IS ON
+           .... 1...        SS#ONEFF  A FF WAS ALREADY PROCESSED DURING
+                                      THIS REQUEST
+           .... .1..        SS#NOALM  DO NOT SOUND AUDIBLE ALARM
+           .... ..1.        SS#1416   USE 14/16-BIT BUFFER ADDRESSING
+           .... ...1        SS#ERASE  ERASE DATA AREA UPON WRAP
+ 634 (27A) BITSTRING        SS#FLAG3  SESSION-FLAGS 3 (SECONDARY)
+           1... ....        SS#SSBKT  SECONDARY SESSION IS IN
+                                      IN-BRACKET STATE
+           .1.. ....        SS#NOCR   SEND DATA WITHOUT CR
+           ..1. ....        SS#PINDS  PARM-IND PKT SENT: SEC'Y RPL BUSY
+           ...1 1111                  NOT USED
+ 634 (27A) BITSTRING        SS#FLAG4  SESSION-FLAGS 4 (DATA CAPTURE)
+           1... ....        SS#SAVON  DATA CAPTURE IS ACTIVE
+           .1.. ....        SS#OPENG  SAVE AS IN PROGRESS
+           ..1. ....        SS#CAPDS  CAPTURE DATASET ALLOCATED
+           ...1 ....        SS#CPTCR  LAST PROC'D CHAR WAS A CR
+           .... 1111                  NOT USED
+-----------------------------------------------------------------------
+ 640 (280) CHARACTER   256  SS#WORK1  LARGE WORKAREA #1
+ 896 (380) CHARACTER   256  SS#WORK2  LARGE WORKAREA #2
+-----------------------------------------------------------------------
+1152 (480) FULLWORD      4  SS#WORD1  WORD-SIZE WORKAREA #1
+1156 (484) FULLWORD      4  SS#WORD2  WORD-SIZE WORKAREA #2
+1160 (488) FULLWORD      4  SS#WORD3  WORD-SIZE WORKAREA #3
+1164 (48C) FULLWORD      4  SS#WORD4  WORD-SIZE WORKAREA #4
+-----------------------------------------------------------------------
+1168 (490) A-ADDRESS     4  SS#BASE   BASE ADDRESS FOR !!SHOW. COMMAND
+-----------------------------------------------------------------------
+1172 (494) A-ADDRESS     4  SS#AHNAE  ADDRESS OF CURRENTLY USED ENTRY
+                                      IN HOST-NAME-TABLE
+-----------------------------------------------------------------------
+1176 (498) CHARACTER   268  SS#LMSG   LOGGER ROUTINE MESSAGE BUFFER
+=======================================================================
+THE FOLLOWING FIELDS ARE USED BY THE PRIMARY SCREEN MANAGER
+-----------------------------------------------------------------------
+1444 (5A4) BINARY        4  SS#ROWS   PRESENTATION SPACE HEIGHT
+1448 (5A8) BINARY        4  SS#COLS   PRESENTATION SPACE WIDTH
+-----------------------------------------------------------------------
+1452 (5AC) BINARY        4  SS#DAREA  NUMBER OF CHARACTER POSITIONS IN
+                                      DATA AREA OF SCREEN
+-----------------------------------------------------------------------
+1456 (5B0) BINARY        2  SS#CSP    CURRENT SCREEN POSITION
+-----------------------------------------------------------------------
+1458 (5B2) CHARACTER     1  SS#SEPCH  CHARACTER TO BE USED FOR
+                                      SEPARATOR LINE
+-----------------------------------------------------------------------
+1459 (5B3) BINARY        1            NOT USED
+-----------------------------------------------------------------------
+1460 (5B4) A-ADDRESS     4  SS#BUFPT  WORKING POINTER INTO SEND BUFFER
+-----------------------------------------------------------------------
+1464 (5B8) A-ADDRESS     8  SS#SBQAB  SEND-BUFFER QUEUE ANCHOR BLOCK
+1464 (5B8) A-ADDRESS     4  SS#SBFST  FIRST QUEUED SEND BUFFER
+1468 (5BC) A-ADDRESS     4  SS#SBLST  LAST QUEUED SEND BUFFER
+-----------------------------------------------------------------------
+1472 (5C0) STRUCTURE        SS#SBPL   SEND BUFFER POOL
+=======================================================================
+THE NUMBER OF SEND-BUFFERS IS SPECIFIED BY THE SYMBOL SS#SBCNT
+-----------------------------------------------------------------------
+   0   (0) STRUCTURE   256            SEND BUFFER
+-----------------------------------------------------------------------
+   0   (0) BITSTRING     2            FLAGS
+   0   (0) BITSTRING     1            FLAGS
+           1... ....        SS#SBIU   THIS SEND BUFFER IS IN USE
+           .1.. ....        SS#PACNG  TURN ON SS#HOLDD AFTER THIS
+                                      BUFFER IS SUCCESSFULLY SENT
+           ..11 ....                  NOT USED
+           .... 1111                  TYPE OF MESSAGE:
+           .... 1...        SS#DATA   DATA
+           .... .1..        SS#ECHO   ECHO
+           .... ..1.        SS#SMSG   SYSTEM MESSAGE
+           .... ...1        SS#ISCR   INITIAL SCREEN
+   1   (1) BINARY        1            NOT USED
+-----------------------------------------------------------------------
+   2   (2) BINARY        2            LENGTH OF DATA IN SEND BUFFER
+-----------------------------------------------------------------------
+   4   (4) A-ADDRESS     4            ADDRESS OF NEXT QUEUED SEND
+                                      BUFFER
+-----------------------------------------------------------------------
+   8   (8) CHARACTER     1            3270 WRITE COMMAND
+-----------------------------------------------------------------------
+   9   (9) CHARACTER     1            3270 WRITE-CONTROL-CHARACTER
+-----------------------------------------------------------------------
+  10   (A) CHARACTER   246            DATA TO BE SENT TO PRIMARY
+=======================================================================
+      ASSUMING 8 BUFFERS ARE GENERATED, THE NEXT ADDRESS IS 3520 (X'DC0').
+      -----------------------------------------------------------------------
+3520 (DC0) BINARY        4  SS#TLOCK  LOCK ON CAPTURE COMM AREA
+3524 (DC4) A-ADDRESS     4  SS#ACCBA  ADDRESS OF CAPTURE CB AREA
+3528 (DC8) FULLWORD      4  SS#CTFDB  FEEDBACK INFO FROM CAPTURE TASK
+3532 (DCC) FULLWORD      4  SS#CTRC   RETURN CODE FROM ALLOCATE/OPEN
+3536 (DD0) CHARACTER     8  SS#DSN    DSN LOWEST LEVEL QUALIFIER
+-----------------------------------------------------------------------
+3544 (DD8) STRUCTURE   256  SS#PAD    PAD VALUES
+-----------------------------------------------------------------------
+3800 (ED8) STRUCTURE        SS#CBS    NIB AND RPLS
+
+
+*** N.B.  The CCB and IOBL have yet to be mapped here.
+
+
+X.25 Reference Information
+---- --------- -----------
+
+Frames
+------
+
+Transmission at the physical level occurs in frames.  Frames may be
+divided into three types: Information (I) frames, Supervisory (S)
+frames, and Unnumbered (U) frames.
+
+Information frames are used for the transmission of packets.
+
+Supervisory frames are used when performing link-level supervisory
+functions related to I-frames.
+
+Unnumbered frames are used to perform link-level supervisory functions
+which control the link itself.
+
+The format of frames is as follows:
+
+ +--------+--------+--------+=====//=====+--------+--------+--------+
+ |        |        |        |            |        |        |        |
+ |  FLAG  | ADDRESS| CONTROL|  Packet    | FCS 1  | FCS 2  |  FLAG  |
+ |        |        |        |            |        |        |        |
+ +--------+--------+--------+=====//=====+--------+--------+--------+
+
+The packet portion is absent in Supervisory and Unnumbered frames.
+
+FLAG
+All frames begin and end with a flag (X'7E').
+
+ADDRESS
+The address byte contains X'01' in commands which flow from DTE to DCE,
+and in responses which flow from DCE to DTE.
+
+It is set to X'03' in commands which flow from DCE to DTE, and
+responses which flow from DTE to DCE.
+
+Packet Type
+------ ----
+
+The packet type is encoded in the third byte of a packet.  This byte
+can be decoded using the following navigation matrix:
+
+   Value of
+   Byte 3         Address = X'01'          Address = X'03'
+   --------    ----------------------   ----------------------
+    X'X1'      DCE RR                   DTE RR
+    X'X5'      DCE RNR                  DTE RNR
+    X'0B'      Incoming call            Call request
+    X'0F'      Call connected           Call accepted
+    X'13'      Clear indication         Clear request
+    X'17'      DCE clear confirmation   DTE clear confirmation
+    X'1B'      Reset indication         Reset request
+    X'1F'      DCE reset confirmation   DTE reset confirmation
+    X'23'      DCE interrupt            DTE interrupt
+    X'27'      DCE interrupt confirm    DTE interrupt confirm
+    X'FB'      Restart indication       Restart request
+    X'FF'      DCE restart confirm      DTE restart confirm
+
+Packets with a packet-type byte which is even (i.e. ends
+in 0, 2, 4, ... E) is a data packet.
+
+
+X.29 Reference Information
+---- --------- -----------
+
+X.29 is the only higher-level protocol specified by CCITT. It is used
+to pass control information between an X.25 DTE and a remote PAD
+(Packet Assembler/Disassembler).  All X.29 communications, or PAD
+messages, are transported within X.25 qualified data packets (data
+packets with the Q-bit set). Because TARA simulates a remote terminal
+in the network, it must also simulate the functions of the PAD to which
+it is (theoretically) connected. This requires that NPSI be generated
+with the PAD=TRANSP option, so that it will pass to TARA the qualified
+data packets used to implement X.29 protocol.  (NOTE: TARA can be used
+with an NPSI which has been generated with PAD=INTEG; however in this
+case it will not respond appropriately to Q-data packets, since it will
+never see them.  When used with an NPSI generated with PAD=INTEG, TARA
+may not work at all with some hosts which expect responses from a PAD.)
+PAD=TRANSP also causes NPSI to pass reset and interrupt packets. To
+identify these packets, the first byte of the RU passed between VTAM
+and TARA is defined as follows:
+
+   X'00'  Data packet without Q-bit
+   X'02'  Data packet with Q-bit
+   X'1B'  Reset packet
+   X'1F'  Reset confirmation
+   X'23'  Interrupt request
+   X'27'  Interrupt confirmation
+
+For Reset packets, the second and third bytes of the RU contain a cause
+and diagnostic value.  For Interrupt packets, the second byte of the RU
+contains the interrupt cause byte (usually set to 0).  TARA's response
+to Reset and Interrupt packets is Reset Confirmation and Interrupt
+Confirmation, respectively.  TARA takes no other action upon receipt
+of such packets.
+
+Protocol ID Field
+-------- -- -----
+
+The Protocol ID field (first two bits of the User Data Field) in the
+Call Request packet identifies the higher-level protocol which will be
+using the Data-qualified packet throughout the virtual call. The four
+possible values for these two bits are:
+
+    B'00'  CCITT Protocol (X.29)
+    B'01'  National Protocol
+    B'10'  Reserved for International User Bodies
+    B'11'  DTE to DTE protocol
+
+To identify X.29 as a higher-level protocol for a virtual call, the
+Protocol ID field in the Call Request packet is set to "00". The User
+Data Field is then redefined by recommendation X.29 as shown below.
+
+              +---------------+
+              |0|0| Reserved|C|    C=0 if call originates
+              +---------------+      from an X.25 DTE
+              |    Reserved   |    C=1 if call originates
+              +---------------+      from an X.29 PAD
+              |    Reserved   |
+              +---------------+
+              |    Reserved   |
+              +---------------+
+              |               |
+              /User Data Field/    0-12 bytes
+              |               |
+              +---------------+
+
+PAD Messages
+--- --------
+
+PAD messages are contained in the User Data field of qualified data
+packets:
+
+              +---------------+
+              |1|D|mod|  LCGN |
+              +---------------+
+              |      LCN      |
+              +---------------+
+              |P(R) |M|P(S) |0|
+              +---------------+
+              |               |
+              /  PAD Message  /
+              |               |
+              +---------------+
+			  
+PAD Message Formats
+--- ------- -------
+
+The first byte of the PAD message is the Message Number, identifying
+the type of PAD message as follows:
+
+  Message
+  Number   PAD Message             Description
+  -------  -----------             -----------
+    00     Parameters Indication   Displays current APP values.
+                                   Response to Read, Set & Read,
+                                   or Set containing an invalid
+                                   parameter access.
+    01     Invitation to Clear     Requests PAD to issue an X.25
+                                   Clear packet.
+    02     Set                     Requests PAD to modify APPs.
+    03     Indication of Break     Notifies remote DTE that the PAD
+                                   has received an asynchronous break
+                                   condition.
+    04     Read                    Requests a Parameters Indication
+                                   response from the PAD.
+    05     Error                   Response to an X.29 protocol
+                                   violation.
+    06     Set & Read              Combination of Set and Read
+                                   messages.
+								   
+
+The remainder of the PAD Message is dependent upon the message type.
+The Set, Read, Set & Read, Parameters Indication, and Indication of
+Break messages next contain a parameter list consisting of alternating
+Parameter Number fields and value fields. The PAD ignores the most
+significant bit of the Parameter Number (V) in Set, Set & Read, Read,
+and Indication of Break messages received. The PAD will set this bit in
+a Parameters Indication message to indicate an invalid access to the
+particular parameter (e.g., value is invalid, parameter is unknown,
+parameter may not be set, etc.). A value of X'7F' in the Parameter
+Number field is used for APPs with numbers greater than X'7F'. In this
+case, the Parameter Number field extends for two bytes, the second byte
+being the APP number minus X'7F'.
+
+Value bytes in the Read message are zero. In the Set and Set & Read
+messages, the Value byte contains the new value desired. In the
+Parameters Indication message, this byte contains the current value of
+the parameter (after it was modified if the message is in response to
+Set & Read). If V is set in the preceding Parameter Number byte, the
+Value byte should be zero.
+
+Indication of Break messages may contain an optional fixed-length
+parameter list of X'0801'. If a Set or Set & Read message contains no
+parameter list, the PAD will reset all parameters to their initial
+values. A Read message containing no parameter list requests the PAD to
+send a Parameters Indication response for all X.3 APPs.
+
+Note that a Parameters Indication message may be sent in response to a
+Set if the Set contains an invalid parameter access.
+
+Invitation to Clear
+
+The Invitation to Clear message consists of only the Message Number
+byte (X'01'). Upon receipt of an Invitation to Clear message, the PAD
+will issue an X.25 Clear packet.
+
+Error
+
+The PAD will issue an Error message in response to an X.29 protocol
+violation. The second byte of the Error message contains an
+explanation of the error:
+
+  Code  Explanation
+  ----  -----------
+   00   PAD Message received containing fewer than eight bits.
+   01   Unrecognized message number received.
+   02   Parameter List format is incorrect or incompatible with Message
+        Message Number.
+   03   PAD Message did not contain an integral number of bytes.
+
+Error Messages with Explanation codes of 01-03 will echo the Message
+Number of the rejected PAD Message in the third byte.
+
+
+X.121 and Telenet Host Address Abbreviations
+----- --- ------- ---- ------- -------------
+
+The Telenet host address abbreviation scheme works as follows:  the
+first three digits of the abbreviated host address comprise the
+telephone area code of the host's location; the remaining digits
+are the last digits in the host address field of the X.121 host
+address.  The X.121 recommendation defines a 14-digit host address:
+
+              C  NNN  HHHHHHHH  PP
+              |  --+  -------+  -+
+              |    |         |   |
+              |    |         |   Host port
+              |    |         |
+              |    |         Host ID
+              |    |
+              |    Network ID
+              |
+              Country
+			  
+The Country/Network ID for Telenet is 3110.  So, an abbreviated host
+address of 20111 would decompose into the area code, 201, and the
+host ID, 11.  By the above rules, this would be expanded into
+20100011; this, in turn, would be built into a complete X.121 address
+of 31102010001100.
+     
+
+
+===============================================================================
+                                Bibliography
+===============================================================================
+
+If you plan to modify TARA source, the single most vital source of information 
+is "ACF/VTAM Programming".  This is the starting point for anyone who plans to 
+work with VTAM application code. This comprehensive document explains the 
+structure of VTAM applications, describes all the VTAM programming macros, the 
+exits, and so forth.  It also enumerates all the return codes, feedback codes,
+and sense codes, ad nauseum.  The only problem is deciding where to start.
+
+     * Advanced Communications Function for VTAM Programming, IBM,
+       Form number SC27-0449.
+	   
+     * Advanced Communications Function for VTAM Reference Summary, IBM, Form
+       number SX27-0008.
+
+[[The above documents don't appear to exist on the bitsavers.org site, but the
+following may suffice instead:
+
+https://bitsavers.org/pdf/ibm/sna/acf/SC38-0256-0_ACF_VTAM_Macro_Language_Guide_197707.pdf
+https://bitsavers.org/pdf/ibm/sna/acf/SC38-0261-1_ACF_VTAM_Macro_Language_Reference_197812.pdf ]]
+
+
+Important information about bind parameters, what session traffic is legal, and 
+LU-type specific information is detailed in "Sessions Between Logical Units."  
+When you want to know more about "Presentation Spaces," this is the place to go.
+
+     * Systems Network Architecture - Sessions Between Logical Units, IBM,
+       Form number GC20-1868.
+	   [[ https://bitsavers.org/pdf/ibm/sna/GC20-1868-2_SNA_Sessions_Between_Logical_Units_Apr81.pdf ]]
+	   
+     * Systems Network Architecture - Introduction to Sessions Between
+       Logical Units, IBM, Form number GC20-1869.
+	   [[ https://bitsavers.org/pdf/ibm/sna/GC20-1869-2_SNA_Introduction_to_Sessions_Between_Logical_Units_Dec79.pdf ]]
+
+70 programming can be tricky if you start getting into extended data streams.  
+TARA hasn't; the only tricky stuff is the screen addressing.  Since TARA will 
+support 3270 presentation spaces of almost any reasonable dimensions, it 
+builds buffer addresses based on what is specified in the bind.  Most 
+information you would ever want when working with 3270 sans EDS is in "3274 
+Control Unit Description and Programmer's Guide."  If you want to get into EDS, 
+then "3270 IDS Data Stream Programmer's Reference" is for you.
+
+     * 3274 Control Unit Description and Programmer's Guide, IBM, Form number
+       GA23-0061.
+	   [[ https://bitsavers.org/pdf/ibm/3274/GA23-0061-2_3274_Control_Unit_Description_and_Programmers_Guide_Mar85.pdf ]]
+	   
+     * IBM 3270 Information Display System Data Stream Programmer's Reference,
+       IBM, Form number GA23-0059.
+
+Unless you're going to be reading traces, there isn't much call for expertise 
+in SNA.  The important "session" concept is covered in "Introduction to 
+Sessions Between Logical Units," mentioned above. However, for those times 
+when you're poring over a trace, trying to figure out what went wrong, "SNA 
+Reference Summary" should be at your side.  It's an invaluable compendium of 
+SNA data.  It used to be in the convenient "handbook" format, but in the 
+latest edition it's been expanded to a full 8-1/2" x 11" format with tabs and 
+everything.
+
+     * Systems Network Architecture Reference Summary, IBM, Form number
+       GA27-3136.
+	   [[ https://bitsavers.org/pdf/ibm/sna/GA27-3136-4_Systems_Network_Architecture_Reference_Summary_198101.pdf ]]
+
+The remote host appears to VTAM as just another LU.  However, that LU is 
+implemented inside NPSI, and it's necessary to understand the operating 
+characteristics of that LU.  The programmer's interface to NPSI is documented 
+in the "NPSI Installation and Operation" manual.  This is an extremely 
+important document if you plan on implementing PAD, DATE, or GATE functions.  
+"NPSI PAD Implementation Guide" is a good source to explain some of NPSI's 
+idiosyncrasies.
+
+     * X.25 NCP Packet Switching Interface for IBM 3705 Installation and
+       Operation, IBM, Form number SC30-3163.
+	   
+     * X.25 NPSI PAD Implementation Guide, IBM World Trade Systems Centers
+       Technical Bulletin, IBM, Form number GG24-1569.
+
+
+NPSI effectively isolates the TARA programmer from X.25 protocols; but when 
+looking at a line trace, you'll be in it up to your elbows.  So, be prepared.  
+IBM doesn't (as far as I know) offer a tutorial on X.25, so you may want to 
+find a class; if possible, one offered by the PSDN vendor that you'll be 
+doing business with. Of course, the final word on the X.25 recommendation (it's 
+not a standard!) is the CCITT "Yellow Book", which is available from the 
+United Nations Bookstore.  The X-series recommendations are in volume 8.  
+For reference purposes, IBM's "NPSI Reference Summary" will be helpful.
+
+The CCITT "Yellow Book" documents the 1980 recommendations.  United Nations, 
+U.N. Bookstore, GA 32B, New York, New York 10017.  Write for information 
+before ordering.  The pertinent parts of this document are now published in 
+the IBM publication, "The X.25 Interface For Attaching SNA Nodes To Packet
+-Switched Data Networks General Information Manual," (GA27-3345-2 or higher) 
+and in "The X.25 Protocol and Seven Other Key CCITT Recommendations," 
+available from Lifetime Learning Publications, Belmont, CA  (ISBN 
+0-534-03268-0), which can be had for about $15.
+
+     * X.25 NCP Packet Switching Interface Reference Summary, IBM, Form number
+       SC30-3079.
+
+Once TARA connects to a host which is expecting a plain old asynchronous ASCII 
+terminal, it it helpful to know something about how such terminals present 
+themselves to the world.  An IBM view of this topic is available in . . .
+
+     * TWX Terminal Installation and Problem Determination Guide, IBM, Form
+       number G320-5901.
+
+The following publications, while they don't address any issue relating
+directly to TARA, do contain good information on NPSI.
+
+    * X.25 NCP Packet Switching Interface Release 2 and 3 Guide, IBM World
+      Trade Systems Centers Technical Bulletin, IBM, Form number GG24-1567.
+	  
+    * X.25 SNA Guide, IBM World Trade Systems Centers Technical Bulletin,
+      IBM, Form number GG24-1568.
+	  
+	  
+	  
+	  
+===============================================================================
+                                  Glossary
+===============================================================================
+
+AID           "Attention Identifier" - The first byte of a block transmission
+              from a 3270 terminal. The AID byte identifies the key (or other
+              action) that initiated the trasmission (e.g. ENTER, ATTN, PFx).
+			  
+asynchronous  (or ASYNC) - in the context prevailing herein, "async" is used 
+              to denote a "dumb" terminal -- one that transmits a single ASCII 
+			  byte at each key depression. The character associated with the 
+			  key may or may not be locally displayed (or printed). 
+			  
+bind          In the world of SNA, bind is the command that establishes a 
+              stateful connection between two LUs (endpoints). There are a 
+			  lot of parameters in a bind since there are a lot of options
+			  available. Complexity is increased by the fact that the two
+			  LUs can negotiate the bind parameters.
+			  
+CCITT         "Consultative Committee for International Telephony and 
+              Telegraphy", an international standards body that promulgates 
+			  standards for telecommunications. It is now known as the ITU-C
+			  (International Telecommunication Union - Telecommunication 
+			  Standardization Sector).
+
+DATE          "Dedicated Access to the X.25 Transport Extension" - An interface
+              option in NPSI that permits only X.25 connections on an MCH.
+              (cf GATE.)			  
+			  
+DCE           "Data Circuit-Terminating Equipment" - an industry-standard
+              (i.e. non-IBM) term often refering to Modems, but really
+			  meaning an interface that connects a DTE (cf) to a network.
+			  
+DTE           "Data Terminal Equipment" - essentially, a network endpoint:
+              either a terminal (smart or dumb, display or printing), or a
+			  computer. Cf DCE.
+
+exit          In the IBM mainframe world, an "exit" is a "user" (as opposed to 
+              OS) program that is called by the OS when a defined event occurs.
+			  A VTAM "application program" (such as TARA) consists mostly of
+			  exits - an exit is called when a user "logs on" to TARA; when
+			  data is received from a connected terminal; when a request made
+			  to VTAM has completed; and so on.
+
+GATE          "General Access to the X.25 Transport Extension" - an interface 
+              option in NPSI that allows both SNA and X.25 connections on an MCH.
+			  (Cf DATE.)
+			  
+LU            "Logical Unit" - in an SNA network, endpoints are referred to
+              as "logical units"; logical units interface to a network via
+			  a PU (physical unit).
+			  
+MCH           "Multichannel Link" - a physical connection between a 37x5
+              communications controller and an X.25 network provider.
+			  
+NCP           "Network Control Progam" - the software that runs in an IBM 37X5
+              Communications Controller. Like a mainframe OS, the NCP must be
+			  created by the customer, specifying parameters by use of macros,
+			  and then processing via assembler.
+			  
+NPSI          "NCP Packet Switching Interface" - a programming add-on to NCP
+              that alllows an IBM SNA network to communicate with an industry
+			  standard X.25 packet-switching network.
+			  
+PAD           "Packet Assembler/Disassembler" - provides multiple asynchronous 
+              terminal connectivity to an X.25 (packet-switching) network or 
+			  host computer.
+			  
+PSDN          "Packet-Switched Data Network" - a network for providing data 
+              services via a system of multiple WANs.
+			  
+PU            "Physical Unit" - in IBM mainframe system, the connection of all
+              devices "connected" to a mainframe is mediated by a "control unit"
+			  (which in turn is connected to a channel, which is what the 
+			  mainframe OS actually interfaces with). In an SNA network, a PU 
+			  generally corresponds to this "control unit".
+
+RPL           "Request Parameter List" - A VTAM control block (i.e. data 
+              structure used to describe requests from an application program
+			  to the access method (VTAM).
+			  
+RPL exit      A program that is called when VTAM has completed executing a
+              request. 
+			  
+SNA           "Systems Network Architecture" - IBM's overarching set of 
+              communications protocols. Conceptually similar to TCP/IP, but
+			  more expansive.
+			  
+SSCP          "System Services Control Point" - Like "LU" and "PU" (cf), the
+              SSCP is a network component defined by the SNA protocol. It is a
+			  network component that controls the state of the network and 
+			  establishes stateful connections between LUs.
+			  
+SVC           "Switched Virtual Circuit" - In a PSDN, a stateful connection 
+              between two endpoints.
+
+Telenet       Not to be confused with the "telnet" comminications protocol, 
+              Telenet was a commercial "packet-switched" data network. Created 
+			  in 1975, Telenet provided public network access between commercial 
+			  and government entities before the widespread adoption of Arpanet.
+			  
+Tymenet       A commercial PSDN similar to Telenet (cf).
+			  
+VTAM          "Virtual Teleecommunications Access Method" - The software 
+              component of IBM mainframe operating systems that ties together 
+			  equipment in a communications network. SNA is the "theory", VTAM 
+			  (and NCP) are the "implementation".
+
+WCC           "Write Control Character" - the firts byte of a block transmission
+              to a 3270 terminal that indicates 1. whether the keyboard should be
+              unlocked; 2. whether the audible alert (beep) should be sounded;
+			  3. whether the "modified data tags" should be reset.
+			  
+WTO           "Write To Operator" - designates a message that appears on the
+              MVS console.	  
+			  
+X.25          An industry standard communications protocol suite, similar in
+              conception to SNA, but promulgated by an international standards
+			  body (CCITT) rather than a single manufacturer.
+			  
